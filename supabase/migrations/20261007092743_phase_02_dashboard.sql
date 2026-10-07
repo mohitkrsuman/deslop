@@ -202,3 +202,5 @@ create policy "Current organization can read insights"
   on public.insights for select
   to authenticated
   using (organization_id = (select auth.jwt() ->> 'org_id'));
+
+
