@@ -15,6 +15,7 @@
   --accent: #2563eb;
   --incoming: #15803d;
   --outgoing: #b45309;
+  --failed: #b42318;
 }
 
 :root.dark {
@@ -27,6 +28,7 @@
   --accent: #60a5fa;
   --incoming: #4ade80;
   --outgoing: #fbbf24;
+  --failed: #f87171;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -40,6 +42,7 @@
     --accent: #60a5fa;
     --incoming: #4ade80;
     --outgoing: #fbbf24;
+    --failed: #f87171;
   }
 }
 
@@ -52,6 +55,7 @@
   --color-accent: var(--accent);
   --color-incoming: var(--incoming);
   --color-outgoing: var(--outgoing);
+  --color-failed: var(--failed);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
