@@ -16,6 +16,13 @@
   --incoming: #15803d;
   --outgoing: #b45309;
   --failed: #b42318;
+  /* File kinds. Hues kept clear of the accent and the two direction colours. */
+  --kind-1: #7c3aed;
+  --kind-2: #0e7490;
+  --kind-3: #be185d;
+  --kind-4: #4338ca;
+  --kind-5: #a21caf;
+  --kind-6: #57534e;
 }
 
 :root.dark {
@@ -29,6 +36,12 @@
   --incoming: #4ade80;
   --outgoing: #fbbf24;
   --failed: #f87171;
+  --kind-1: #a78bfa;
+  --kind-2: #22d3ee;
+  --kind-3: #f472b6;
+  --kind-4: #818cf8;
+  --kind-5: #e879f9;
+  --kind-6: #a8a29e;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -43,6 +56,12 @@
     --incoming: #4ade80;
     --outgoing: #fbbf24;
     --failed: #f87171;
+    --kind-1: #a78bfa;
+    --kind-2: #22d3ee;
+    --kind-3: #f472b6;
+    --kind-4: #818cf8;
+    --kind-5: #e879f9;
+    --kind-6: #a8a29e;
   }
 }
 

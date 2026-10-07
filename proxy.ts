@@ -5,7 +5,9 @@ function isPublicPath(pathname: string) {
     pathname === "/sign-in" ||
     pathname.startsWith("/sign-in/") ||
     pathname === "/sign-up" ||
-    pathname.startsWith("/sign-up/")
+    pathname.startsWith("/sign-up/") ||
+    // Static parser snapshot, viewable without an account. Removed with it.
+    pathname === "/preview"
   );
 }
 
