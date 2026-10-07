@@ -7,6 +7,7 @@ export type Database = {
           name: string;
           status: "queued" | "analyzing" | "complete" | "failed";
           created_at: string;
+          finished_at: string | null;
           organization_id: string;
           project_id: string;
         };

@@ -15,6 +15,12 @@ values
   ('21000000-0000-0000-0000-000000000001', 'org_deslop_beta', '20000000-0000-0000-0000-000000000002', 'Beta service · initial map', 'queued')
 on conflict (id) do nothing;
 
+update public.analyses
+set finished_at = created_at + interval '5 minutes'
+where id = '11000000-0000-0000-0000-000000000001'
+  and status = 'complete'
+  and finished_at is null;
+
 insert into public.files (id, organization_id, analysis_id, path, language)
 values
   ('11100000-0000-0000-0000-000000000001', 'org_deslop_alpha', '11000000-0000-0000-0000-000000000001', 'src/index.ts', 'TypeScript'),
