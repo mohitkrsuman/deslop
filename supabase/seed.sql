@@ -1,11 +1,6 @@
 -- Replace these Clerk organization ids with the two organizations used for a
--- local acceptance check. The policies read the org_id claim from the token.
-
-insert into public.organizations (id, name)
-values
-  ('org_deslop_alpha', 'Alpha team'),
-  ('org_deslop_beta', 'Beta team')
-on conflict (id) do nothing;
+-- local acceptance check. Organizations are owned by Clerk; the policies read
+-- the org_id claim from the Clerk token.
 
 insert into public.projects (id, organization_id, name, repository_url)
 values
