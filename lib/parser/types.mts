@@ -88,6 +88,7 @@ export interface RepositoryAdapter {
   classifyFile(file: { path: string; moduleId: string }): string;
 }
 
+// Used when no framework adapter applies: every file is a plain module.
 export const fallbackAdapter: RepositoryAdapter = {
   name: "fallback",
   classifyFile: () => "module",

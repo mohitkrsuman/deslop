@@ -32,18 +32,24 @@ interface FoundImport {
   literal: boolean;
 }
 
+// Path without its source extension, e.g. `lib/env.ts` -> `lib/env`.
 function moduleIdFor(relativePath: string): string {
   return relativePath.replace(/(?:\.d)?\.(?:tsx?|mts|cts|jsx?|mjs|cjs)$/i, "");
 }
 
+// Counts lines like an editor does: a trailing newline doesn't add a line.
 function lineCount(contents: string): number {
   if (!contents) return 0;
   const lines = contents.split(/\r\n|\r|\n/).length;
   return /(?:\r\n|\r|\n)$/.test(contents) ? lines - 1 : lines;
 }
 
+// Finds every import, `export ... from` and `import()` in a file, with its line.
+// A dynamic import with a non-literal argument is kept and flagged so it can be
+// reported as excluded rather than silently dropped.
 function collectImports(source: ts.SourceFile): FoundImport[] {
   const found: FoundImport[] = [];
+  // Records one import at the line where its node starts.
   function add(kind: ImportKind, specifier: string, node: ts.Node, literal = true): void {
     found.push({
       kind,
@@ -52,6 +58,7 @@ function collectImports(source: ts.SourceFile): FoundImport[] {
       literal,
     });
   }
+  // Walks the whole tree so imports nested inside functions are found too.
   function visit(node: ts.Node): void {
     if (ts.isImportDeclaration(node) && ts.isStringLiteralLike(node.moduleSpecifier)) {
       add("import", node.moduleSpecifier.text, node);
@@ -72,11 +79,14 @@ function collectImports(source: ts.SourceFile): FoundImport[] {
   return found;
 }
 
+// True when target is strictly inside root; root itself doesn't count.
 function insideRoot(root: string, target: string): boolean {
   const relative = path.relative(root, target);
   return relative !== "" && relative !== ".." && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative);
 }
 
+// True when a specifier matches a tsconfig `paths` pattern. Only used to word
+// the unresolved reason; it never resolves anything itself.
 function aliasMatches(specifier: string, paths: ts.MapLike<string[]> | undefined): boolean {
   if (!paths) return false;
   return Object.keys(paths).some((pattern) => {
@@ -87,6 +97,7 @@ function aliasMatches(specifier: string, paths: ts.MapLike<string[]> | undefined
   });
 }
 
+// True if the path exists. Missing is false; any other stat error is thrown.
 async function existsOnDisk(filePath: string): Promise<boolean> {
   try {
     await stat(filePath);
@@ -97,6 +108,9 @@ async function existsOnDisk(filePath: string): Promise<boolean> {
   }
 }
 
+// Finds the compiler options for a file from the nearest tsconfig.json or
+// jsconfig.json walking up to the root, cached per config. A broken config
+// falls back to defaults and is recorded as a warning instead of failing the run.
 class CompilerOptionsByFile {
   private readonly cache = new Map<string, ts.CompilerOptions>();
   private readonly root: string;
@@ -106,6 +120,7 @@ class CompilerOptionsByFile {
     this.root = root;
   }
 
+  // Options from the nearest config above filePath, or defaults if none.
   async get(filePath: string): Promise<ts.CompilerOptions> {
     let directory = path.dirname(filePath);
     while (directory === this.root || insideRoot(this.root, directory)) {
@@ -145,6 +160,10 @@ class CompilerOptionsByFile {
   }
 }
 
+// Classifies one import using TypeScript's own module resolution. It's
+// resolved only when TypeScript lands on a file we parsed. Anything else gets a
+// status and a reason: external (built-in or package), excluded (non-literal or
+// target skipped) or unresolved (nothing found). Never guessed.
 async function resolveImport(
   root: string,
   fromAbsolute: string,
@@ -198,6 +217,10 @@ async function resolveImport(
   };
 }
 
+// Entry point: walks the repo, parses each source file, resolves each import,
+// and returns files, edges and a coverage report. A file that can't be read or
+// has syntax errors is skipped and counted, never partly included. Edges are
+// deduplicated per (from, to, kind).
 export async function parseRepository(
   directory: string,
   adapter: RepositoryAdapter = fallbackAdapter,

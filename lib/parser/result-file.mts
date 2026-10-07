@@ -1,26 +1,33 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { PARSER_SCHEMA_VERSION, type ParserResult } from "./types.mts";
 
+// A plain object: not null, not an array.
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+// Narrows unknown to string.
 function isString(value: unknown): value is string {
   return typeof value === "string";
 }
 
+// Counts and line numbers: whole numbers, zero or more.
 function isNonnegativeInteger(value: unknown): value is number {
   return Number.isInteger(value) && typeof value === "number" && value >= 0;
 }
 
+// An array where every entry passes the predicate.
 function isArrayOf<T>(value: unknown, predicate: (entry: unknown) => entry is T): value is T[] {
   return Array.isArray(value) && value.every(predicate);
 }
 
+// One of the three import kinds the parser records.
 function isImportKind(value: unknown): boolean {
   return value === "import" || value === "re-export" || value === "dynamic-import";
 }
 
+// One import record. A resolved import must name its target file; every other
+// status must carry a reason, because nothing is reported without one.
 function isImportObservation(item: unknown): item is ParserResult["imports"][number] {
   if (!isRecord(item) || !isString(item.from) || !isString(item.specifier) ||
       !isImportKind(item.kind) || !isNonnegativeInteger(item.line) || item.line < 1) return false;
@@ -30,6 +37,9 @@ function isImportObservation(item: unknown): item is ParserResult["imports"][num
       isString(item.reason);
 }
 
+// Checks a loaded JSON value is a complete ParserResult. Beyond the shape, it
+// rejects results whose totals disagree with their lists, or with an edge that
+// isn't backed by a resolved import between two parsed files.
 export function isParserResult(value: unknown): value is ParserResult {
   if (!isRecord(value) || value.schemaVersion !== PARSER_SCHEMA_VERSION ||
       !isString(value.root) || !isString(value.adapter)) return false;
@@ -79,10 +89,12 @@ export function isParserResult(value: unknown): value is ParserResult {
     coverage.filesSkipped === coverage.skippedFiles.length;
 }
 
+// Saves a result as pretty-printed JSON.
 export async function writeParserResult(filePath: string, result: ParserResult): Promise<void> {
   await writeFile(filePath, `${JSON.stringify(result, null, 2)}\n`, "utf8");
 }
 
+// Loads a saved result and throws unless it passes isParserResult.
 export async function readParserResult(filePath: string): Promise<ParserResult> {
   const value: unknown = JSON.parse(await readFile(filePath, "utf8"));
   if (!isParserResult(value)) throw new Error(`Invalid parser result schema in ${filePath}`);
