@@ -1,5 +1,18 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
+## Repository parser
+
+Run the standalone TypeScript/JavaScript parser against a directory on disk:
+
+```bash
+pnpm parse:repo path/to/repository --output analysis.json
+```
+
+It prints file and import coverage, every skipped path and reason, unresolved imports,
+re-export totals, edges, and distinct folders. The versioned JSON result has its
+TypeScript contract in `lib/parser/types.mts`; `readParserResult` validates it when
+loaded. Run `pnpm test:parser` for the parser checks. No application server is needed.
+
 ## Getting Started
 
 First, run the development server:

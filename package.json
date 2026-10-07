@@ -6,7 +6,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "parse:repo": "node --experimental-strip-types scripts/parse-repository.mts",
+    "test:parser": "node --experimental-strip-types --test tests/parser.test.mts"
   },
   "dependencies": {
     "@clerk/nextjs": "^7.9.10",
