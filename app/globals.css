@@ -84,3 +84,12 @@ body {
   color: var(--foreground);
   font-family: var(--font-sans), sans-serif;
 }
+
+.canvas-file-scroll {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.canvas-file-scroll::-webkit-scrollbar {
+  display: none;
+}

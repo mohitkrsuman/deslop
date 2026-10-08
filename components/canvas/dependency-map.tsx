@@ -8,17 +8,19 @@ import {
   getViewportForBounds,
   useReactFlow,
   useStoreApi,
+  useUpdateNodeInternals,
   type Edge as FlowEdge,
   type Node as FlowNode,
   type NodeProps,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { createContext, useCallback, useContext, useMemo, useState, type CSSProperties } from "react";
-import type { Category } from "@/lib/canvas/categories";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { extensionOf, type Category } from "@/lib/canvas/categories";
 import { foldDirectories } from "@/lib/canvas/fold";
 import { boundsOf, layoutCanvas } from "@/lib/canvas/layout";
 import { highlightFor, rowKey, type Highlight, type Selection } from "@/lib/canvas/selection";
 import {
+  ABOVE_HANDLE,
   MORE_HANDLE,
   NODE_HANDLE,
   SIZES,
@@ -38,7 +40,8 @@ interface MapActions {
   open: (folder: string) => void;
   close: (folder: string) => void;
   selectRow: (node: string, path: string) => void;
-  kindColor: (kind: string) => string;
+  scrollPanel: (folder: string, scrollTop: number) => void;
+  extensionColor: (path: string) => string;
 }
 
 const ActionsContext = createContext<MapActions | null>(null);
@@ -65,11 +68,11 @@ const handleStyle: CSSProperties = {
   background: "transparent",
 };
 
-function Handles({ id }: { id: string }) {
+function Handles({ id, inside = false }: { id: string; inside?: boolean }) {
   return (
     <>
-      <Handle type="target" position={Position.Left} id={`in:${id}`} isConnectable={false} style={handleStyle} />
-      <Handle type="source" position={Position.Right} id={`out:${id}`} isConnectable={false} style={handleStyle} />
+      <Handle type="target" position={Position.Left} id={`in:${id}`} isConnectable={false} style={inside ? { ...handleStyle, left: 0 } : handleStyle} />
+      <Handle type="source" position={Position.Right} id={`out:${id}`} isConnectable={false} style={inside ? { ...handleStyle, right: 0 } : handleStyle} />
     </>
   );
 }
@@ -105,16 +108,32 @@ function FolderNode({ data }: NodeProps<FolderNodeType>) {
 }
 
 function PanelNode({ data }: NodeProps<PanelNodeType>) {
-  const { close, selectRow, kindColor } = useActions();
+  const { close, selectRow, scrollPanel, extensionColor } = useActions();
+  const updateNodeInternals = useUpdateNodeInternals();
+  const updateFrame = useRef<number | null>(null);
   const { view, highlight } = data;
   const lit = (handle: string): boolean =>
     !highlight || highlight.nodes.has(view.id) || highlight.rows.has(rowKey(view.id, handle));
   const frameLit = !highlight || highlight.nodes.has(view.id) ||
-    [...view.rows.map((row) => row.path), MORE_HANDLE].some((handle) => highlight.rows.has(rowKey(view.id, handle)));
+    [...view.rows.map((row) => row.path), ABOVE_HANDLE, MORE_HANDLE].some((handle) => highlight.rows.has(rowKey(view.id, handle)));
+
+  useEffect(() => () => {
+    if (updateFrame.current !== null) cancelAnimationFrame(updateFrame.current);
+  }, []);
+
+  const onRowsScroll = (scrollTop: number) => {
+    scrollPanel(view.folder, scrollTop);
+    if (updateFrame.current === null) {
+      updateFrame.current = requestAnimationFrame(() => {
+        updateFrame.current = null;
+        updateNodeInternals(view.id);
+      });
+    }
+  };
 
   return (
     <div
-      className={`flex h-full w-full flex-col border bg-surface ${data.selected ? "border-accent" : "border-border"} ${
+      className={`nowheel relative flex h-full min-w-0 w-full flex-col border bg-surface ${data.selected ? "border-accent" : "border-border"} ${
         frameLit ? "" : "opacity-25"
       }`}
     >
@@ -130,31 +149,48 @@ function PanelNode({ data }: NodeProps<PanelNodeType>) {
           {view.fileCount} files <FanCounts fanIn={view.fanIn} fanOut={view.fanOut} />
         </span>
       </button>
-      {view.rows.map((row) => (
-        <button
-          key={row.path}
-          type="button"
-          onClick={() => selectRow(view.id, row.path)}
-          title={row.path}
-          className={`relative flex shrink-0 cursor-pointer items-center gap-2 px-3 text-left ${
-            data.selectedRow === row.path ? "bg-accent/10 text-accent" : ""
-          } ${lit(row.path) ? "" : "opacity-25"}`}
-          style={{ height: SIZES.row }}
-        >
-          <span aria-hidden="true" className="size-1.5 shrink-0" style={{ background: kindColor(row.kind) }} />
-          <span className="min-w-0 flex-1 truncate font-mono text-[11px]">{row.label}</span>
-          <span className="text-[10px] text-muted">
-            <FanCounts fanIn={row.fanIn} fanOut={row.fanOut} />
-          </span>
-          <Handles id={row.path} />
-        </button>
-      ))}
-      {view.hiddenRows > 0 && (
+      {view.aboveRows > 0 && (
+        <div className="pointer-events-none absolute inset-x-0 h-px" style={{ top: SIZES.panelHeader }}>
+          <Handles id={ABOVE_HANDLE} />
+        </div>
+      )}
+      <div
+        className="canvas-file-scroll nowheel nopan min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain touch-pan-y"
+        role="region"
+        aria-label={`${view.folder} files`}
+        tabIndex={0}
+        onScroll={(event) => onRowsScroll(event.currentTarget.scrollTop)}
+      >
+        {view.rows.map((row) => (
+          <button
+            key={row.path}
+            type="button"
+            onClick={() => selectRow(view.id, row.path)}
+            title={row.path}
+            className={`relative flex w-full shrink-0 cursor-pointer items-center gap-2 px-3 text-left ${
+              data.selectedRow === row.path ? "bg-accent/10 text-accent" : ""
+            } ${lit(row.path) ? "" : "opacity-25"}`}
+            style={{ height: SIZES.row }}
+          >
+            <span aria-hidden="true" className="size-1.5 shrink-0" style={{ background: extensionColor(row.path) }} />
+            <span className="min-w-0 flex-1 truncate font-mono text-[11px]">{row.label}</span>
+            <span className="text-[10px] text-muted">
+              <FanCounts fanIn={row.fanIn} fanOut={row.fanOut} />
+            </span>
+            <Handles id={row.path} inside />
+          </button>
+        ))}
+      </div>
+      {view.scrollable && (
         <div
-          className={`relative flex shrink-0 items-center px-3 text-[10px] text-muted ${lit(MORE_HANDLE) ? "" : "opacity-25"}`}
+          className={`relative flex shrink-0 items-center px-3 text-[10px] text-muted ${
+            lit(ABOVE_HANDLE) || lit(MORE_HANDLE) ? "" : "opacity-25"
+          }`}
           style={{ height: SIZES.row }}
         >
-          {view.hiddenRows} more
+          {view.aboveRows > 0 && `${view.aboveRows} above`}
+          {view.aboveRows > 0 && view.belowRows > 0 && " · "}
+          {view.belowRows > 0 && `${view.belowRows} more`}
           <Handles id={MORE_HANDLE} />
         </div>
       )}
@@ -167,18 +203,19 @@ const nodeTypes = { folder: FolderNode, panel: PanelNode };
 function MapCanvas({ files, edges, categories }: DependencyMapProps) {
   const folding = useMemo(() => foldDirectories(files), [files]);
   const [openFolders, setOpenFolders] = useState<ReadonlySet<string>>(() => new Set());
+  const [scrollTops, setScrollTops] = useState<ReadonlyMap<string, number>>(() => new Map());
   const [selection, setSelection] = useState<Selection>(null);
   const { getViewport, setViewport } = useReactFlow();
   const store = useStoreApi();
 
   const layoutFor = useCallback(
-    (open: ReadonlySet<string>) => {
-      const view = buildCanvasView(files, edges, folding, open);
+    (open: ReadonlySet<string>, scroll: ReadonlyMap<string, number>) => {
+      const view = buildCanvasView(files, edges, folding, open, scroll);
       return { view, positioned: layoutCanvas(view) };
     },
     [files, edges, folding],
   );
-  const { view, positioned } = useMemo(() => layoutFor(openFolders), [layoutFor, openFolders]);
+  const { view, positioned } = useMemo(() => layoutFor(openFolders, scrollTops), [layoutFor, openFolders, scrollTops]);
   const highlight = useMemo(() => highlightFor(view, selection), [view, selection]);
 
   // Fits against the layout *after* the change, computed here from the next
@@ -187,16 +224,16 @@ function MapCanvas({ files, edges, categories }: DependencyMapProps) {
   const refit = useCallback(
     (open: ReadonlySet<string>) => {
       const { width, height } = store.getState();
-      const next = layoutFor(open);
+      const next = layoutFor(open, scrollTops);
       setViewport(
         getViewportForBounds(boundsOf(next.positioned), width, height, MIN_ZOOM, getViewport().zoom, FIT_PADDING),
       );
     },
-    [layoutFor, store, getViewport, setViewport],
+    [layoutFor, scrollTops, store, getViewport, setViewport],
   );
 
   const actions = useMemo<MapActions>(() => {
-    const colors = new Map(categories.map((category) => [category.kind, category.color]));
+    const colors = new Map(categories.map((category) => [category.extension, category.color]));
     return {
       open: (folder) => {
         const next = new Set(openFolders).add(folder);
@@ -208,13 +245,22 @@ function MapCanvas({ files, edges, categories }: DependencyMapProps) {
         const next = new Set(openFolders);
         next.delete(folder);
         setOpenFolders(next);
-        const panel = nodeIdFor(folder, true);
-        setSelection((current) =>
-          current && (current.kind === "node" ? current.id : current.node) === panel ? null : current,
-        );
+        setScrollTops((current) => {
+          if (!current.has(folder)) return current;
+          const updated = new Map(current);
+          updated.delete(folder);
+          return updated;
+        });
+        setSelection({ kind: "node", id: nodeIdFor(folder, false) });
       },
       selectRow: (node, path) => setSelection({ kind: "row", node, path }),
-      kindColor: (kind) => colors.get(kind) ?? "transparent",
+      scrollPanel: (folder, scrollTop) => setScrollTops((current) => {
+        const previous = current.get(folder) ?? 0;
+        if (Math.floor(previous / SIZES.row) === Math.floor(scrollTop / SIZES.row) &&
+            Math.ceil(previous / SIZES.row) === Math.ceil(scrollTop / SIZES.row)) return current;
+        return new Map(current).set(folder, scrollTop);
+      }),
+      extensionColor: (path) => colors.get(extensionOf(path)) ?? "transparent",
     };
   }, [categories, openFolders, refit]);
 
@@ -274,6 +320,10 @@ function MapCanvas({ files, edges, categories }: DependencyMapProps) {
         nodesDraggable={false}
         nodesConnectable={false}
         elementsSelectable={false}
+        // React Flow disables pointer events on nodes unless they are selectable,
+        // draggable, or have a node click handler. Keep our buttons interactive
+        // while preventing their clicks from reaching the pane's clear action.
+        onNodeClick={(event) => event.stopPropagation()}
         onPaneClick={() => setSelection(null)}
         minZoom={MIN_ZOOM}
         fitView

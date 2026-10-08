@@ -24,6 +24,7 @@ export function rowKey(node: string, handle: string): string {
 export function highlightFor(view: CanvasView, selection: Selection): Highlight | null {
   if (!selection) return null;
   const highlight: Highlight = { nodes: new Set(), rows: new Set(), edges: new Set(), outgoing: new Set() };
+  const nodeKind = new Map(view.nodes.map((node) => [node.id, node.kind]));
 
   if (selection.kind === "node") highlight.nodes.add(selection.id);
   else highlight.rows.add(rowKey(selection.node, selection.path));
@@ -39,10 +40,11 @@ export function highlightFor(view: CanvasView, selection: Selection): Highlight 
     if (!leaves && !arrives) continue;
     highlight.edges.add(edge.id);
     if (leaves) highlight.outgoing.add(edge.id);
-    // The far end lights up as a row if it sits in a panel, else as a node.
+    // Keep only the actual endpoint bright inside a panel. A folded folder is
+    // one node, so its whole box stays bright.
     const [farNode, farHandle] = leaves ? [edge.target, targetHandle] : [edge.source, sourceHandle];
-    highlight.rows.add(rowKey(farNode, farHandle));
-    if (farNode.startsWith("folder:")) highlight.nodes.add(farNode);
+    if (nodeKind.get(farNode) === "panel") highlight.rows.add(rowKey(farNode, farHandle));
+    else highlight.nodes.add(farNode);
   }
   return highlight;
 }

@@ -1,21 +1,28 @@
 import type { FileNode } from "../parser/types.mts";
 
 export interface Category {
-  kind: string;
+  extension: string;
   count: number;
-  // CSS colour for this kind. Six hues; a seventh kind would share one, which
-  // is the point to stop adding kinds rather than hues.
+  // CSS colour for this extension. Six hues; a seventh shares one.
   color: string;
 }
 
 const PALETTE_SIZE = 6;
 
-// Groups files by the kind the adapter gave them, largest first, ties by name,
-// so a kind keeps its colour for a given repository.
+export function extensionOf(path: string): string {
+  const name = path.slice(path.lastIndexOf("/") + 1);
+  const dot = name.lastIndexOf(".");
+  return dot > 0 ? name.slice(dot).toLowerCase() : "(no extension)";
+}
+
+// Group files by extension, largest first, ties by name.
 export function categoriesOf(files: FileNode[]): Category[] {
   const counts = new Map<string, number>();
-  for (const file of files) counts.set(file.kind, (counts.get(file.kind) ?? 0) + 1);
+  for (const file of files) {
+    const extension = extensionOf(file.path);
+    counts.set(extension, (counts.get(extension) ?? 0) + 1);
+  }
   return [...counts.entries()]
-    .sort(([leftKind, left], [rightKind, right]) => right - left || leftKind.localeCompare(rightKind))
-    .map(([kind, count], index) => ({ kind, count, color: `var(--kind-${(index % PALETTE_SIZE) + 1})` }));
+    .sort(([leftExtension, left], [rightExtension, right]) => right - left || leftExtension.localeCompare(rightExtension))
+    .map(([extension, count], index) => ({ extension, count, color: `var(--kind-${(index % PALETTE_SIZE) + 1})` }));
 }

@@ -15,6 +15,7 @@ export const SIZES = {
 } as const;
 
 export const NODE_HANDLE = "node";
+export const ABOVE_HANDLE = "+above";
 export const MORE_HANDLE = "+more";
 
 export interface FolderView {
@@ -46,7 +47,9 @@ export interface PanelView {
   fanIn: number;
   fanOut: number;
   rows: RowView[];
-  hiddenRows: number;
+  aboveRows: number;
+  belowRows: number;
+  scrollable: boolean;
   width: number;
   height: number;
 }
@@ -94,6 +97,7 @@ export function buildCanvasView(
   edges: Edge[],
   folding: Folding,
   openFolders: ReadonlySet<string>,
+  scrollTops: ReadonlyMap<string, number> = new Map(),
 ): CanvasView {
   const fileByPath = new Map(files.map((file) => [file.path, file]));
   const labels = shortestUniqueLabels(folding.groups.map((group) => group.folder));
@@ -144,10 +148,14 @@ export function buildCanvasView(
         return file ? [file] : [];
       })
       .sort((left, right) => right.fanIn - left.fanIn || left.path.localeCompare(right.path));
-    const shown = ordered.slice(0, SIZES.maxRows);
+    const visibleRows = Math.min(ordered.length, SIZES.maxRows);
+    const maxScrollTop = Math.max(0, ordered.length - visibleRows) * SIZES.row;
+    const scrollTop = Math.min(Math.max(0, scrollTops.get(group.folder) ?? 0), maxScrollTop);
+    const firstVisible = Math.floor(scrollTop / SIZES.row);
+    const lastVisible = Math.min(ordered.length, Math.ceil((scrollTop + visibleRows * SIZES.row) / SIZES.row));
     const prefix = group.folder === "." ? "" : `${group.folder}/`;
-    const rowLabels = shortestUniqueLabels(shown.map((file) => file.path.slice(prefix.length)));
-    const rows = shown.map((file) => {
+    const rowLabels = shortestUniqueLabels(ordered.map((file) => file.path.slice(prefix.length)));
+    const rows = ordered.map((file) => {
       const relative = file.path.slice(prefix.length);
       return {
         path: file.path,
@@ -157,15 +165,14 @@ export function buildCanvasView(
         fanOut: file.fanOut,
       };
     });
-    const shownPaths = new Set(rows.map((row) => row.path));
-    for (const file of group.files) {
-      anchor.set(file, { node: id, handle: shownPaths.has(file) ? file : MORE_HANDLE });
+    for (const [index, file] of ordered.entries()) {
+      const handle = index < firstVisible ? ABOVE_HANDLE : index >= lastVisible ? MORE_HANDLE : file.path;
+      anchor.set(file.path, { node: id, handle });
     }
-    const hiddenRows = ordered.length - rows.length;
     const widest = Math.max(
       textWidth(label),
       textWidth(meta),
-      ...rows.map((row) => textWidth(`${row.label}  ${row.fanIn} ${row.fanOut}`) + 12),
+      ...rows.slice(0, SIZES.maxRows).map((row) => textWidth(`${row.label}  ${row.fanIn} ${row.fanOut}`) + 12),
     );
     return {
       kind: "panel",
@@ -176,9 +183,11 @@ export function buildCanvasView(
       fanIn,
       fanOut,
       rows,
-      hiddenRows,
+      aboveRows: firstVisible,
+      belowRows: ordered.length - lastVisible,
+      scrollable: ordered.length > SIZES.maxRows,
       width: widest + SIZES.nodePadding,
-      height: SIZES.panelHeader + SIZES.row * (rows.length + (hiddenRows > 0 ? 1 : 0)),
+      height: SIZES.panelHeader + SIZES.row * (visibleRows + (ordered.length > SIZES.maxRows ? 1 : 0)),
     };
   });
 
