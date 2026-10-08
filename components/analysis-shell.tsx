@@ -14,13 +14,13 @@ export function AnalysisShell({
 }) {
   return (
     <div className="grid h-full min-h-0 grid-cols-[13rem_minmax(0,1fr)_18rem] bg-background text-xs text-foreground">
-      <aside aria-label="Categories" className="min-h-0 overflow-y-auto border-r border-border bg-surface">
+      <aside aria-label="Categories" className="analysis-side-scroll min-h-0 overflow-y-auto border-r border-border bg-surface">
         {rail}
       </aside>
       <main aria-label="Map" className="relative min-h-0 min-w-0">
         {map}
       </main>
-      <aside aria-label="Details" className="min-h-0 overflow-y-auto border-l border-border bg-surface">
+      <aside aria-label="Details" className="analysis-side-scroll min-h-0 overflow-y-auto border-l border-border bg-surface">
         {detail}
       </aside>
     </div>

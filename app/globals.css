@@ -85,11 +85,13 @@ body {
   font-family: var(--font-sans), sans-serif;
 }
 
-.canvas-file-scroll {
+.canvas-file-scroll,
+.analysis-side-scroll {
   scrollbar-width: none;
   -ms-overflow-style: none;
 }
 
-.canvas-file-scroll::-webkit-scrollbar {
+.canvas-file-scroll::-webkit-scrollbar,
+.analysis-side-scroll::-webkit-scrollbar {
   display: none;
 }
