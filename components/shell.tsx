@@ -7,13 +7,15 @@ import type { Theme } from "@/lib/theme";
 export function Shell({
   children,
   theme,
+  fillViewport = false,
 }: {
   children: ReactNode;
   theme: Theme;
+  fillViewport?: boolean;
 }) {
   return (
-    <div className="flex min-h-full flex-1 flex-col bg-background text-sm">
-      <header className="flex flex-wrap items-center gap-3 border-b border-border bg-surface px-3 py-2">
+    <div className={`flex flex-col bg-background text-sm ${fillViewport ? "h-dvh min-h-0 overflow-hidden" : "min-h-full flex-1"}`}>
+      <header className="flex shrink-0 flex-wrap items-center gap-3 border-b border-border bg-surface px-3 py-2">
         <span className="text-xs font-medium tracking-tight">DeSlop</span>
         <OrganizationSwitcher
           hidePersonal
@@ -26,7 +28,7 @@ export function Shell({
           <UserButton />
         </div>
       </header>
-      <main className="flex-1">{children}</main>
+      <main className={fillViewport ? "min-h-0 flex-1 overflow-hidden" : "flex-1"}>{children}</main>
     </div>
   );
 }

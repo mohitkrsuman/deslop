@@ -5,11 +5,13 @@ import { AnalysisShell } from "@/components/analysis-shell";
 import { CategoryRail } from "@/components/canvas/category-rail";
 import { DependencyMap } from "@/components/canvas/dependency-map";
 import { DetailPane } from "@/components/canvas/detail-pane";
-import { categoriesOf } from "@/lib/canvas/categories";
+import { InsightsPanel } from "@/components/canvas/insights-panel";
+import { categoriesOf, categoryFilterFor } from "@/lib/canvas/categories";
 import { buildDetailIndex } from "@/lib/canvas/details";
 import { foldDirectories } from "@/lib/canvas/fold";
 import { type HoverTarget, type Selection } from "@/lib/canvas/selection";
 import { nodeIdFor } from "@/lib/canvas/view";
+import { buildInsights } from "@/lib/graph/insights";
 import type { Edge, FileNode } from "@/lib/parser/types.mts";
 
 export function PreviewAnalysis({
@@ -28,6 +30,9 @@ export function PreviewAnalysis({
   const categories = useMemo(() => categoriesOf(files), [files]);
   const folding = useMemo(() => foldDirectories(files), [files]);
   const index = useMemo(() => buildDetailIndex(files, edges), [files, edges]);
+  const insights = useMemo(() => buildInsights(files, index), [files, index]);
+  const [activeCategory, setActiveCategory] = useState<string | null>(null);
+  const categoryFilter = useMemo(() => categoryFilterFor(files, folding, activeCategory), [files, folding, activeCategory]);
   const [openFolders, setOpenFolders] = useState<ReadonlySet<string>>(() => new Set());
   const [selection, setSelection] = useState<Selection>(null);
   const [hovered, setHovered] = useState<HoverTarget>(null);
@@ -42,12 +47,22 @@ export function PreviewAnalysis({
 
   return (
     <AnalysisShell
-      rail={<CategoryRail name={name} categories={categories} />}
+      rail={
+        <>
+          <CategoryRail name={name} categories={categories} activeCategory={activeCategory} onCategoryChange={(extension) => {
+            setActiveCategory(extension);
+            setSelection(null);
+            setHovered(null);
+          }} />
+          <InsightsPanel insights={insights} graph={index} folding={folding} hovered={hovered} onSelectFile={selectFile} onHoverChange={setHovered} />
+        </>
+      }
       map={
         <DependencyMap
           files={files}
           edges={edges}
           categories={categories}
+          categoryFilter={categoryFilter}
           folding={folding}
           openFolders={openFolders}
           onOpenFoldersChange={setOpenFolders}

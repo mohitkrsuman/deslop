@@ -16,7 +16,7 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
-import { extensionOf, type Category } from "@/lib/canvas/categories";
+import { extensionOf, type Category, type CategoryFilter } from "@/lib/canvas/categories";
 import type { Folding } from "@/lib/canvas/fold";
 import { boundsOf, layoutCanvas } from "@/lib/canvas/layout";
 import { highlightFor, rowKey, type Highlight, type HoverTarget, type Selection } from "@/lib/canvas/selection";
@@ -56,9 +56,9 @@ function useActions(): MapActions {
   return actions;
 }
 
-type FolderNodeType = FlowNode<{ view: FolderView; dim: boolean; selected: boolean; hovered: boolean }, "folder">;
+type FolderNodeType = FlowNode<{ view: FolderView; dim: boolean; selected: boolean; hovered: boolean; matchCount: number | null }, "folder">;
 type PanelNodeType = FlowNode<
-  { view: PanelView; highlight: Highlight | null; selectedRow: string | null; selected: boolean; hoveredFolder: boolean; hoveredRow: string | null },
+  { view: PanelView; highlight: Highlight | null; selectedRow: string | null; selected: boolean; hoveredFolder: boolean; hoveredRow: string | null; categoryFilter: CategoryFilter | null; matchCount: number | null },
   "panel"
 >;
 
@@ -108,7 +108,7 @@ function FolderNode({ data }: NodeProps<FolderNodeType>) {
     >
       <span className="font-mono text-[11px] leading-4">{view.label}</span>
       <span className="text-[10px] leading-4 text-muted">
-        {view.fileCount} files <FanCounts fanIn={view.fanIn} fanOut={view.fanOut} />
+        {data.matchCount === null ? `${view.fileCount} files` : `${data.matchCount}/${view.fileCount} match`} <FanCounts fanIn={view.fanIn} fanOut={view.fanOut} />
       </span>
       <Handles id={NODE_HANDLE} />
     </button>
@@ -122,10 +122,23 @@ function PanelNode({ data }: NodeProps<PanelNodeType>) {
   const rowsElement = useRef<HTMLDivElement | null>(null);
   const lastAutoScrolledRow = useRef<string | null>(null);
   const { view, highlight } = data;
-  const lit = (handle: string): boolean =>
-    !highlight || data.hoveredFolder || data.hoveredRow === handle || highlight.nodes.has(view.id) || highlight.rows.has(rowKey(view.id, handle));
-  const frameLit = data.hoveredFolder || Boolean(data.hoveredRow) || !highlight || highlight.nodes.has(view.id) ||
-    [...view.rows.map((row) => row.path), ABOVE_HANDLE, MORE_HANDLE].some((handle) => highlight.rows.has(rowKey(view.id, handle)));
+  const categoryLit = (handle: string): boolean => {
+    if (!data.categoryFilter) return true;
+    if (handle === ABOVE_HANDLE || handle === MORE_HANDLE) {
+      const rows = handle === ABOVE_HANDLE ? view.rows.slice(0, view.aboveRows) : view.rows.slice(view.rows.length - view.belowRows);
+      return rows.some((row) => data.categoryFilter!.paths.has(row.path));
+    }
+    return data.categoryFilter.paths.has(handle);
+  };
+  // Selection and hover take priority over category dimming. A selected file
+  // and its neighbours must remain readable even outside the active category.
+  const lit = (handle: string): boolean => data.hoveredFolder || data.hoveredRow === handle || (highlight
+    ? highlight.nodes.has(view.id) || highlight.rows.has(rowKey(view.id, handle))
+    : categoryLit(handle));
+  const frameLit = data.hoveredFolder || Boolean(data.hoveredRow) || (highlight
+    ? highlight.nodes.has(view.id) || [...view.rows.map((row) => row.path), ABOVE_HANDLE, MORE_HANDLE]
+      .some((handle) => highlight.rows.has(rowKey(view.id, handle)))
+    : data.matchCount !== 0);
 
   useEffect(() => () => {
     if (updateFrame.current !== null) cancelAnimationFrame(updateFrame.current);
@@ -160,7 +173,7 @@ function PanelNode({ data }: NodeProps<PanelNodeType>) {
 
   return (
     <div
-      className={`nowheel relative flex h-full min-w-0 w-full flex-col border bg-surface ${data.selected || data.hoveredFolder ? "border-accent" : "border-border"} ${
+      className={`nowheel relative flex h-full min-w-0 w-full flex-col border bg-surface ${data.selected || data.selectedRow !== null || data.hoveredFolder ? "border-accent" : "border-border"} ${
         frameLit ? "" : "opacity-25"
       }`}
     >
@@ -177,7 +190,7 @@ function PanelNode({ data }: NodeProps<PanelNodeType>) {
       >
         <span className="font-mono text-[11px] leading-4">{view.label}</span>
         <span className="text-[10px] leading-4 text-muted">
-          {view.fileCount} files <FanCounts fanIn={view.fanIn} fanOut={view.fanOut} />
+          {data.matchCount === null ? `${view.fileCount} files` : `${data.matchCount}/${view.fileCount} match`} <FanCounts fanIn={view.fanIn} fanOut={view.fanOut} />
         </span>
       </button>
       {view.aboveRows > 0 && (
@@ -205,7 +218,7 @@ function PanelNode({ data }: NodeProps<PanelNodeType>) {
             title={row.path}
             className={`relative flex w-full shrink-0 cursor-pointer items-center gap-2 px-3 text-left ${
               data.selectedRow === row.path || data.hoveredRow === row.path ? "bg-accent/10 text-accent" : ""
-            } ${lit(row.path) ? "" : "opacity-25"}`}
+            } ${frameLit && !lit(row.path) ? "opacity-25" : ""}`}
             style={{ height: SIZES.row }}
           >
             <span aria-hidden="true" className="size-1.5 shrink-0" style={{ background: extensionColor(row.path) }} />
@@ -220,7 +233,7 @@ function PanelNode({ data }: NodeProps<PanelNodeType>) {
       {view.scrollable && (
         <div
           className={`relative flex shrink-0 items-center px-3 text-[10px] text-muted ${
-            lit(ABOVE_HANDLE) || lit(MORE_HANDLE) ? "" : "opacity-25"
+            !frameLit || lit(ABOVE_HANDLE) || lit(MORE_HANDLE) ? "" : "opacity-25"
           }`}
           style={{ height: SIZES.row }}
         >
@@ -237,7 +250,7 @@ function PanelNode({ data }: NodeProps<PanelNodeType>) {
 const nodeTypes = { folder: FolderNode, panel: PanelNode };
 
 function MapCanvas({
-  files, edges, categories, folding, openFolders, onOpenFoldersChange,
+  files, edges, categories, categoryFilter, folding, openFolders, onOpenFoldersChange,
   selection, onSelectionChange, hovered, onHoverChange,
 }: DependencyMapProps) {
   const [scrollTops, setScrollTops] = useState<ReadonlyMap<string, number>>(() => new Map());
@@ -319,12 +332,14 @@ function MapCanvas({
         const hoveredFile = hovered?.kind === "file" && folding.groupOf.get(hovered.path) === node.folder
           ? hovered.path : null;
         const base = { id: node.id, position: { x, y }, width: node.width, height: node.height };
+        const matchCount = categoryFilter ? categoryFilter.counts.get(node.folder) ?? 0 : null;
         return node.kind === "folder"
           ? {
               ...base, type: "folder",
               data: {
                 view: node, selected, hovered: hoveredFolder || Boolean(hoveredFile),
-                dim: Boolean(highlight && !highlight.nodes.has(node.id) && !hoveredFolder && !hoveredFile),
+                matchCount,
+                dim: !hoveredFolder && !hoveredFile && (highlight ? !highlight.nodes.has(node.id) : matchCount === 0),
               },
             }
           : {
@@ -337,16 +352,18 @@ function MapCanvas({
                 selectedRow: selection?.kind === "row" && selection.node === node.id ? selection.path : null,
                 hoveredFolder,
                 hoveredRow: hoveredFile,
+                categoryFilter,
+                matchCount,
               },
             };
       }),
-    [positioned, selection, highlight, hovered, folding],
+    [positioned, selection, highlight, hovered, folding, categoryFilter],
   );
 
   const flowEdges = useMemo<FlowEdge[]>(
     () =>
       view.edges.map((edge) => {
-        const lit = !highlight || highlight.edges.has(edge.id);
+        const lit = highlight ? highlight.edges.has(edge.id) : !categoryFilter || edge.extensions.includes(categoryFilter.extension);
         // Colour only means direction, so it only appears once there's a
         // selection to be direction relative to.
         const stroke = highlight && lit
@@ -366,7 +383,7 @@ function MapCanvas({
           },
         };
       }),
-    [view, highlight],
+    [view, highlight, categoryFilter],
   );
 
   return (
@@ -423,6 +440,7 @@ interface DependencyMapProps {
   files: FileNode[];
   edges: Edge[];
   categories: Category[];
+  categoryFilter: CategoryFilter | null;
   folding: Folding;
   openFolders: ReadonlySet<string>;
   onOpenFoldersChange: (folders: ReadonlySet<string>) => void;

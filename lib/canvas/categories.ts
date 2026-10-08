@@ -1,4 +1,19 @@
 import type { FileNode } from "../parser/types.mts";
+import type { Folding } from "./fold.ts";
+
+export interface CategoryFilter {
+  extension: string;
+  paths: ReadonlySet<string>;
+  counts: ReadonlyMap<string, number>;
+}
+
+// Counts cover every member of a folded group, including offscreen panel rows.
+export function categoryFilterFor(files: FileNode[], folding: Folding, extension: string | null): CategoryFilter | null {
+  if (extension === null) return null;
+  const paths = new Set(files.filter((file) => extensionOf(file.path) === extension).map((file) => file.path));
+  const counts = new Map(folding.groups.map((group) => [group.folder, group.files.filter((path) => paths.has(path)).length]));
+  return { extension, paths, counts };
+}
 
 export interface Category {
   extension: string;
