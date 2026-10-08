@@ -5,6 +5,11 @@ export type Selection =
   | { kind: "row"; node: string; path: string }
   | null;
 
+export type HoverTarget =
+  | { kind: "folder"; folder: string }
+  | { kind: "file"; path: string }
+  | null;
+
 export interface Highlight {
   // Nodes kept at full strength as a whole.
   nodes: Set<string>;
