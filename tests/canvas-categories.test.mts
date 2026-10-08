@@ -9,14 +9,14 @@ test("category counts include hidden rows and folded groups without removing fil
   const files: FileNode[] = Array.from({ length: 30 }, (_, i) => {
     const folder = i < 20 ? "a" : "b";
     const path = `${folder}/${i}.${i % 3 === 0 ? "tsx" : "ts"}`;
-    return { path, folder, kind: "module", moduleId: path, lineCount: 1, sha256: "", fanIn: 0, fanOut: 0 };
+    return { path, folder, kind: i % 3 === 0 ? "component" : "other", moduleId: path, lineCount: 1, sha256: "", fanIn: 0, fanOut: 0 };
   });
   const edges: Edge[] = [
     { from: files[0].path, to: files[20].path, kind: "import" },
     { from: files[1].path, to: files[22].path, kind: "import" },
   ];
   const folding = foldDirectories(files);
-  const filter = categoryFilterFor(files, folding, ".tsx")!;
+  const filter = categoryFilterFor(files, folding, "component")!;
   assert.equal(filter.paths.size, 10);
   assert.equal(filter.counts.get("a"), 7);
   assert.equal(filter.counts.get("b"), 3);
@@ -28,7 +28,7 @@ test("category counts include hidden rows and folded groups without removing fil
   assert.equal(panel.rows.filter((row) => filter.paths.has(row.path)).length, filter.counts.get("a"));
   assert.equal(view.nodes.length, folding.groups.length);
   assert.equal(view.edges.length, 2);
-  assert.equal(view.edges.filter((edge) => edge.extensions.includes(".tsx")).length, 1);
+  assert.equal(view.edges.filter((edge) => edge.roles.includes("component")).length, 1);
   assert.equal(categoryFilterFor(files, folding, null), null);
 });
 
@@ -36,12 +36,14 @@ test("category counts reconcile across every folded and open panel", () => {
   const files: FileNode[] = Array.from({ length: 65 }, (_, index) => {
     const folder = `packages/${Math.floor(index / 13)}`;
     const path = `${folder}/module-${index}.${index % 4 === 0 ? "tsx" : "ts"}`;
-    return { path, folder, kind: "module", moduleId: path, lineCount: 1, sha256: "", fanIn: 0, fanOut: 0 };
+    return { path, folder, kind: index % 4 === 0 ? "component" : "other", moduleId: path, lineCount: 1, sha256: "", fanIn: 0, fanOut: 0 };
   });
   const folding = foldDirectories(files);
   const view = buildCanvasView(files, [], folding, new Set(folding.groups.map((group) => group.folder)));
-  for (const category of categoriesOf(files)) {
-    const filter = categoryFilterFor(files, folding, category.extension)!;
+  const categories = categoriesOf(files, "react");
+  assert.deepEqual(categories.map((category) => category.label), ["Components", "Hooks", "Tests", "Type declarations", "Config", "Other modules"]);
+  for (const category of categories) {
+    const filter = categoryFilterFor(files, folding, category.role)!;
     assert.equal([...filter.counts.values()].reduce((sum, count) => sum + count, 0), category.count);
     for (const panel of view.nodes) {
       assert.ok(panel.kind === "panel");

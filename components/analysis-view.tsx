@@ -6,6 +6,7 @@ import { CategoryRail } from "@/components/canvas/category-rail";
 import { DependencyMap } from "@/components/canvas/dependency-map";
 import { DetailPane } from "@/components/canvas/detail-pane";
 import { InsightsPanel } from "@/components/canvas/insights-panel";
+import { RouteTable, type RouteRow } from "@/components/canvas/route-table";
 import { categoriesOf, categoryFilterFor } from "@/lib/canvas/categories";
 import { buildDetailIndex } from "@/lib/canvas/details";
 import { foldDirectories } from "@/lib/canvas/fold";
@@ -13,6 +14,7 @@ import { type HoverTarget, type Selection } from "@/lib/canvas/selection";
 import { nodeIdFor } from "@/lib/canvas/view";
 import { buildInsights } from "@/lib/graph/insights";
 import type { Edge, FileNode, ParserCoverage } from "@/lib/parser/types.mts";
+import { taxonomyFor } from "@/lib/taxonomy.mts";
 
 export function AnalysisView({
   name,
@@ -20,6 +22,7 @@ export function AnalysisView({
   importCount,
   files,
   edges,
+  routes,
   coverage,
   coveragePercent,
 }: {
@@ -28,10 +31,11 @@ export function AnalysisView({
   importCount: number;
   files: FileNode[];
   edges: Edge[];
+  routes: RouteRow[];
   coverage: ParserCoverage;
   coveragePercent: number;
 }) {
-  const categories = useMemo(() => categoriesOf(files), [files]);
+  const categories = useMemo(() => categoriesOf(files, adapter), [files, adapter]);
   const folding = useMemo(() => foldDirectories(files), [files]);
   const index = useMemo(() => buildDetailIndex(files, edges), [files, edges]);
   const insights = useMemo(() => buildInsights(files, index), [files, index]);
@@ -40,6 +44,7 @@ export function AnalysisView({
   const [openFolders, setOpenFolders] = useState<ReadonlySet<string>>(() => new Set());
   const [selection, setSelection] = useState<Selection>(null);
   const [hovered, setHovered] = useState<HoverTarget>(null);
+  const [mainView, setMainView] = useState<"map" | "routes">("map");
 
   const selectFile = useCallback((path: string) => {
     const folder = folding.groupOf.get(path);
@@ -53,8 +58,8 @@ export function AnalysisView({
     <AnalysisShell
       rail={
         <>
-          <CategoryRail name={name} categories={categories} activeCategory={activeCategory} onCategoryChange={(extension) => {
-            setActiveCategory(extension);
+          <CategoryRail name={name} framework={taxonomyFor(adapter).framework} categories={categories} activeCategory={activeCategory} onCategoryChange={(role) => {
+            setActiveCategory(role);
             setSelection(null);
             setHovered(null);
           }} />
@@ -62,7 +67,30 @@ export function AnalysisView({
         </>
       }
       map={
-        <div className="relative h-full min-h-0">
+        <div className="flex h-full min-h-0 flex-col">
+        <div role="tablist" aria-label="Main view" className="flex shrink-0 border-b border-border bg-surface">
+          {(["map", "routes"] as const).map((value) => (
+            <button
+              key={value}
+              type="button"
+              role="tab"
+              aria-selected={mainView === value}
+              onClick={() => setMainView(value)}
+              className={`cursor-pointer border-b-2 px-3 py-1.5 text-[11px] ${mainView === value ? "border-accent text-foreground" : "border-transparent text-muted"}`}
+            >
+              {value === "map" ? "Map" : <>Routes <span className="tabular-nums text-muted">{routes.length}</span></>}
+            </button>
+          ))}
+        </div>
+        {mainView === "routes" && (
+          <div className="min-h-0 flex-1">
+            <RouteTable routes={routes} notes={coverage.routeNotes} folding={folding}
+              selectedPath={selection?.kind === "row" ? selection.path : null}
+              hovered={hovered} onSelectFile={selectFile} onHoverChange={setHovered} />
+          </div>
+        )}
+        {/* Hidden rather than unmounted, so the map keeps its viewport and open folders. */}
+        <div className={`relative min-h-0 flex-1 ${mainView === "map" ? "" : "hidden"}`}>
         <DependencyMap
           files={files}
           edges={edges}
@@ -85,12 +113,14 @@ export function AnalysisView({
           </div>
         </details>}
         </div>
+        </div>
       }
       detail={
         <DetailPane
           name={name}
           adapter={adapter}
           importCount={importCount}
+          routeCount={routes.length}
           files={files}
           categories={categories}
           folding={folding}

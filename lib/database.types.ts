@@ -34,6 +34,13 @@ export type Database = {
         };
         Insert: never; Update: never; Relationships: [];
       };
+      routes: {
+        Row: {
+          id: string; analysis_id: string; organization_id: string;
+          file_id: string; method: string; path: string;
+        };
+        Insert: never; Update: never; Relationships: [];
+      };
       edges: {
         Row: {
           id: string; analysis_id: string; organization_id: string;

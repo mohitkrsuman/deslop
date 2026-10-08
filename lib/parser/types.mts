@@ -1,4 +1,6 @@
-export const PARSER_SCHEMA_VERSION = 1 as const;
+import type ts from "typescript";
+
+export const PARSER_SCHEMA_VERSION = 2 as const;
 
 export type ImportKind = "import" | "re-export" | "dynamic-import";
 
@@ -63,6 +65,8 @@ export interface ParserCoverage {
   skippedFiles: SkippedFile[];
   skippedDirectories: SkippedDirectory[];
   configurationWarnings: string[];
+  // Why routes were withheld, so an empty route table is explained, not blank.
+  routeNotes: string[];
   imports: {
     found: number;
     resolved: number;
@@ -80,16 +84,43 @@ export interface ParserResult {
   files: FileNode[];
   edges: Edge[];
   imports: ImportObservation[];
+  routes: Route[];
   coverage: ParserCoverage;
 }
 
-export interface RepositoryAdapter {
-  name: string;
-  classifyFile(file: { path: string; moduleId: string }): string;
+// A route exists only when its method and full pattern were both read from the
+// syntax. The pattern is written the way the framework writes it.
+export interface Route {
+  file: string;
+  method: string;
+  path: string;
+  line: number;
 }
 
-// Used when no framework adapter applies: every file is a plain module.
-export const fallbackAdapter: RepositoryAdapter = {
-  name: "fallback",
-  classifyFile: () => "module",
-};
+export interface RepositoryListing {
+  root: string;
+  // Source files the parser will read.
+  sourcePaths: string[];
+  // Other files found and not ignored, e.g. package.json, for detection.
+  otherPaths: string[];
+}
+
+export interface AdapterFile {
+  path: string;
+  source: ts.SourceFile;
+}
+
+// One adapter applied to one repository. Files are inspected once each, in
+// path order, then finish() returns what needed the whole repository to know.
+export interface AdapterRun {
+  name: string;
+  roleOf(file: AdapterFile): string;
+  finish(): { routes: Route[]; notes: string[] };
+}
+
+// Framework knowledge. detect() returns null when the repository isn't one of
+// its kind; the parser tries adapters in the order given and the first wins.
+export interface RepositoryAdapter {
+  name: string;
+  detect(repository: RepositoryListing): Promise<AdapterRun | null>;
+}

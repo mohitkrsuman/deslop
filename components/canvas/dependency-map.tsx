@@ -19,7 +19,7 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
-import { extensionOf, type Category, type CategoryFilter } from "@/lib/canvas/categories";
+import type { Category, CategoryFilter } from "@/lib/canvas/categories";
 import type { Folding } from "@/lib/canvas/fold";
 import { boundsOf, layoutCanvas } from "@/lib/canvas/layout";
 import { highlightFor, rowKey, type Highlight, type HoverTarget, type Selection } from "@/lib/canvas/selection";
@@ -48,7 +48,7 @@ interface MapActions {
   hoverFile: (path: string) => void;
   hoverFolder: (folder: string) => void;
   clearHover: () => void;
-  extensionColor: (path: string) => string;
+  roleColor: (role: string) => string;
 }
 
 const ActionsContext = createContext<MapActions | null>(null);
@@ -119,7 +119,7 @@ function FolderNode({ data }: NodeProps<FolderNodeType>) {
 }
 
 function PanelNode({ data }: NodeProps<PanelNodeType>) {
-  const { close, selectRow, scrollPanel, hoverFile, hoverFolder, clearHover, extensionColor } = useActions();
+  const { close, selectRow, scrollPanel, hoverFile, hoverFolder, clearHover, roleColor } = useActions();
   const updateNodeInternals = useUpdateNodeInternals();
   const updateFrame = useRef<number | null>(null);
   const rowsElement = useRef<HTMLDivElement | null>(null);
@@ -224,7 +224,7 @@ function PanelNode({ data }: NodeProps<PanelNodeType>) {
             } ${frameLit && !lit(row.path) ? "opacity-25" : ""}`}
             style={{ height: SIZES.row }}
           >
-            <span aria-hidden="true" className="size-1.5 shrink-0" style={{ background: extensionColor(row.path) }} />
+            <span aria-hidden="true" className="size-1.5 shrink-0" style={{ background: roleColor(row.kind) }} />
             <span className="min-w-0 flex-1 truncate font-mono text-[11px]">{row.label}</span>
             <span className="text-[10px] text-muted">
               <FanCounts fanIn={row.fanIn} fanOut={row.fanOut} />
@@ -315,7 +315,7 @@ function MapCanvas({
   }, [openFolders, refit]);
 
   const actions = useMemo<MapActions>(() => {
-    const colors = new Map(categories.map((category) => [category.extension, category.color]));
+    const colors = new Map(categories.map((category) => [category.role, category.color]));
     return {
       open: (folder) => {
         const next = new Set(openFolders).add(folder);
@@ -344,7 +344,7 @@ function MapCanvas({
       hoverFile: (path) => onHoverChange({ kind: "file", path }),
       hoverFolder: (folder) => onHoverChange({ kind: "folder", folder }),
       clearHover: () => onHoverChange(null),
-      extensionColor: (path) => colors.get(extensionOf(path)) ?? "transparent",
+      roleColor: (role) => colors.get(role) ?? "transparent",
     };
   }, [categories, openFolders, onOpenFoldersChange, onSelectionChange, onHoverChange]);
 
@@ -395,7 +395,7 @@ function MapCanvas({
   const flowEdges = useMemo<FlowEdge[]>(
     () =>
       view.edges.map((edge) => {
-        const lit = highlight ? highlight.edges.has(edge.id) : !categoryFilter || edge.extensions.includes(categoryFilter.extension);
+        const lit = highlight ? highlight.edges.has(edge.id) : !categoryFilter || edge.roles.includes(categoryFilter.role);
         // Colour only means direction, so it only appears once there's a
         // selection to be direction relative to.
         const stroke = highlight && lit

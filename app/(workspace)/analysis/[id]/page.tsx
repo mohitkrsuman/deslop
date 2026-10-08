@@ -4,7 +4,9 @@ import { rerunAnalysis } from "@/app/actions/analysis";
 import { AnalysisView } from "@/components/analysis-view";
 import { ProgressStream } from "@/components/progress-stream";
 import { createServerSupabaseClient } from "@/lib/supabase";
+import type { RouteRow } from "@/components/canvas/route-table";
 import type { Edge, FileNode, ImportKind, ParserCoverage } from "@/lib/parser/types.mts";
+import { normalizeRole } from "@/lib/taxonomy.mts";
 
 export const maxDuration = 900;
 
@@ -30,6 +32,7 @@ export default async function AnalysisPage({ params }: PageProps<"/analysis/[id]
       <p className="mt-4 text-center text-xs text-failed">{analysis.error_message}</p>}
   </section>;
 
+  const adapter = analysis.adapter ?? "fallback";
   const files: FileNode[] = [];
   const idToPath = new Map<string, string>();
   for (let offset = 0; ; offset += 1000) {
@@ -40,7 +43,7 @@ export default async function AnalysisPage({ params }: PageProps<"/analysis/[id]
     for (const row of data ?? []) {
       idToPath.set(row.id, row.path);
       files.push({ path: row.path, folder: row.folder ?? ".", moduleId: row.module_id ?? row.path,
-        kind: row.kind ?? "module", lineCount: row.line_count ?? 0, sha256: row.sha256 ?? "",
+        kind: normalizeRole(adapter, row.kind ?? ""), lineCount: row.line_count ?? 0, sha256: row.sha256 ?? "",
         fanIn: row.fan_in ?? 0, fanOut: row.fan_out ?? 0 });
     }
     if (!data || data.length < 1000) break;
@@ -59,6 +62,27 @@ export default async function AnalysisPage({ params }: PageProps<"/analysis/[id]
     if (!data || data.length < 1000) break;
   }
 
+  const routes: RouteRow[] = [];
+  for (let offset = 0; ; offset += 1000) {
+    const { data, error: routeError } = await client.from("routes")
+      .select("file_id,method,path")
+      .eq("analysis_id", id).order("path").order("method").range(offset, offset + 999);
+    if (routeError) throw routeError;
+    for (const row of data ?? []) {
+      const file = idToPath.get(row.file_id);
+      if (file) routes.push({ file, method: row.method, path: row.path });
+    }
+    if (!data || data.length < 1000) break;
+  }
+  // Analyses stored before route notes existed have none to show.
+  const storedCoverage = analysis.coverage as Partial<ParserCoverage> | null;
+  const coverage: ParserCoverage = storedCoverage?.imports ? { ...storedCoverage as ParserCoverage, routeNotes: storedCoverage.routeNotes ?? [] } : {
+    filesFound: files.length, filesParsed: files.length, filesSkipped: 0,
+    skippedFiles: [], skippedDirectories: [], configurationWarnings: [], routeNotes: [],
+    imports: { found: edges.length, resolved: edges.length, external: 0,
+      excluded: 0, unresolved: 0, unresolvedExamples: [] },
+  };
+
   return <div className="flex h-full min-h-0 flex-col">
     <div className="flex shrink-0 items-center justify-between gap-4 border-b border-border bg-surface px-4 py-2 text-xs">
       <div className="flex items-center gap-4"><Link href="/" className="text-muted hover:underline">← Analyses</Link>
@@ -68,14 +92,9 @@ export default async function AnalysisPage({ params }: PageProps<"/analysis/[id]
       <form action={rerun}><button className="border border-border px-3 py-1.5 hover:bg-background">Run again</button></form>
     </div>
     <div className="min-h-0 flex-1">
-      <AnalysisView name={analysis.name} adapter={analysis.adapter ?? "fallback"}
-        importCount={analysis.import_count ?? 0} files={files} edges={edges}
-        coverage={(analysis.coverage as ParserCoverage | null) ?? {
-          filesFound: files.length, filesParsed: files.length, filesSkipped: 0,
-          skippedFiles: [], skippedDirectories: [], configurationWarnings: [],
-          imports: { found: edges.length, resolved: edges.length, external: 0,
-            excluded: 0, unresolved: 0, unresolvedExamples: [] },
-        }}
+      <AnalysisView name={analysis.name} adapter={adapter}
+        importCount={analysis.import_count ?? 0} files={files} edges={edges} routes={routes}
+        coverage={coverage}
         coveragePercent={analysis.coverage_percent ?? 100} />
     </div>
   </div>;

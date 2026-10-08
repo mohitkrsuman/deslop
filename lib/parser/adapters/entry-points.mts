@@ -1,7 +1,7 @@
 import type { FileNode } from "../types.mts";
 
 const ENTRY_KINDS = new Set([
-  "page", "route", "api-route", "layout", "middleware", "proxy", "config",
+  "page", "route", "api-route", "layout", "route-ui", "metadata", "middleware", "proxy", "config",
   "configuration", "entrypoint", "entry-point", "instrumentation",
 ]);
 

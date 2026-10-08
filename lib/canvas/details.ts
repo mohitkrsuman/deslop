@@ -1,5 +1,6 @@
 import type { Edge, FileNode } from "../parser/types.mts";
 import { buildGraphIndex } from "../graph/graph.ts";
+import { GENERIC_ROLES } from "../taxonomy.mts";
 
 export interface DetailIndex {
   fileByPath: Map<string, FileNode>;
@@ -7,7 +8,6 @@ export interface DetailIndex {
   dependents: Map<string, string[]>;
   mostDependedOn: FileNode[];
   unimported: FileNode[];
-  routeCount: number;
   unidentifiedCount: number;
 }
 
@@ -27,7 +27,6 @@ export function buildDetailIndex(files: FileNode[], edges: Edge[]): DetailIndex 
       .sort((left, right) => incomingCount(right) - incomingCount(left) || left.path.localeCompare(right.path)),
     unimported: files.filter((file) => incomingCount(file) === 0)
       .sort((left, right) => outgoingCount(right) - outgoingCount(left) || left.path.localeCompare(right.path)),
-    routeCount: files.filter((file) => file.kind === "route" || file.kind === "page" || file.kind === "api-route").length,
-    unidentifiedCount: files.filter((file) => file.kind === "module" || file.kind === "unknown").length,
+    unidentifiedCount: files.filter((file) => file.kind === GENERIC_ROLES.other).length,
   };
 }

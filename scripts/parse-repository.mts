@@ -1,5 +1,6 @@
 import path from "node:path";
 import process from "node:process";
+import { FRAMEWORK_ADAPTERS } from "../lib/parser/adapters/index.mts";
 import { parseRepository } from "../lib/parser/parse.mts";
 import { writeParserResult } from "../lib/parser/result-file.mts";
 
@@ -19,13 +20,14 @@ async function main(): Promise<void> {
     output = args.shift();
   }
 
-  const result = await parseRepository(directory);
+  const result = await parseRepository(directory, FRAMEWORK_ADAPTERS);
   const { coverage } = result;
   const folders = new Set(result.files.map((file) => file.folder));
   const reExports = result.imports.filter((item) => item.kind === "re-export");
   const resolvedReExports = reExports.filter((item) => item.status === "resolved");
 
   console.log(`Repository: ${result.root}`);
+  console.log(`Adapter: ${result.adapter}`);
   console.log(`Files found: ${coverage.filesFound}`);
   console.log(`Files parsed: ${coverage.filesParsed}`);
   console.log(`Files skipped: ${coverage.filesSkipped}`);
@@ -33,6 +35,16 @@ async function main(): Promise<void> {
   console.log(`Edges: ${result.edges.length}`);
   console.log(`Imports: ${coverage.imports.found} (${coverage.imports.resolved} resolved, ${coverage.imports.external} external, ${coverage.imports.excluded} excluded, ${coverage.imports.unresolved} unresolved)`);
   console.log(`Re-exports: ${reExports.length} found, ${resolvedReExports.length} resolved`);
+  const roles = new Map<string, number>();
+  for (const file of result.files) roles.set(file.kind, (roles.get(file.kind) ?? 0) + 1);
+  console.log(`Roles: ${[...roles].map(([role, count]) => `${role} ${count}`).join(", ")}`);
+  console.log(`Routes: ${result.routes.length}`);
+  for (const route of result.routes) {
+    console.log(`ROUTE ${route.method} ${route.path}  ${route.file}:${route.line}`);
+  }
+  for (const note of coverage.routeNotes) {
+    console.log(`ROUTE NOTE ${note}`);
+  }
   for (const file of coverage.skippedFiles) {
     console.log(`SKIP ${file.path}: ${file.reason} — ${file.detail}`);
   }

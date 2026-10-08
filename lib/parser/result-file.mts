@@ -55,6 +55,10 @@ export function isParserResult(value: unknown): value is ParserResult {
 
   if (!isArrayOf(value.imports, isImportObservation)) return false;
 
+  if (!isArrayOf(value.routes, (route): route is ParserResult["routes"][number] =>
+    isRecord(route) && isString(route.file) && isString(route.method) && isString(route.path) &&
+    route.path.startsWith("/") && isNonnegativeInteger(route.line) && route.line >= 1)) return false;
+
   const coverage = value.coverage;
   if (!isRecord(coverage) || !isNonnegativeInteger(coverage.filesFound) ||
       !isNonnegativeInteger(coverage.filesParsed) || !isNonnegativeInteger(coverage.filesSkipped) ||
@@ -66,7 +70,7 @@ export function isParserResult(value: unknown): value is ParserResult {
   if (!isArrayOf(coverage.skippedDirectories, (directory): directory is ParserResult["coverage"]["skippedDirectories"][number] =>
     isRecord(directory) && isString(directory.path) && isString(directory.detail) &&
     (directory.reason === "ignored" || directory.reason === "symbolic_link" || directory.reason === "read_error"))) return false;
-  if (!isArrayOf(coverage.configurationWarnings, isString)) return false;
+  if (!isArrayOf(coverage.configurationWarnings, isString) || !isArrayOf(coverage.routeNotes, isString)) return false;
 
   const imports = coverage.imports;
   if (!isRecord(imports) || !isNonnegativeInteger(imports.found) ||
@@ -79,6 +83,7 @@ export function isParserResult(value: unknown): value is ParserResult {
     .map((item) => `${item.from}\0${item.to}\0${item.kind}`));
   if (value.edges.some((edge) => !filePaths.has(edge.from) || !filePaths.has(edge.to) ||
       !resolvedKeys.has(`${edge.from}\0${edge.to}\0${edge.kind}`))) return false;
+  if (value.routes.some((route) => !filePaths.has(route.file))) return false;
   return imports.found === value.imports.length &&
     imports.found === imports.resolved + imports.external + imports.excluded + imports.unresolved &&
     imports.resolved === value.imports.filter((item) => item.status === "resolved").length &&

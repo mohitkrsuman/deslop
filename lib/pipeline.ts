@@ -3,6 +3,7 @@ import "server-only";
 import { rm } from "node:fs/promises";
 import { createClient } from "@supabase/supabase-js";
 import { fetchGithubArchive, parseGithubUrl } from "@/lib/github-archive";
+import { FRAMEWORK_ADAPTERS } from "@/lib/parser/adapters/index.mts";
 import { parseRepository } from "@/lib/parser/parse.mts";
 import type { ParserResult } from "@/lib/parser/types.mts";
 
@@ -62,6 +63,15 @@ async function storeResult(client: Worker, id: string, organizationId: string, r
     const { error } = await client.from("edges").insert(batch);
     if (error) throw error;
   }
+  // Old routes went with the deleted files; their foreign key cascades.
+  for (let start = 0; start < result.routes.length; start += 300) {
+    const batch = result.routes.slice(start, start + 300).map((route) => ({
+      organization_id: organizationId, analysis_id: id,
+      file_id: ids.get(route.file)!, method: route.method, path: route.path,
+    }));
+    const { error } = await client.from("routes").insert(batch);
+    if (error) throw error;
+  }
   const { error } = await client.from("analyses").update({
     commit_sha: commitSha, adapter: result.adapter, coverage: result.coverage,
     coverage_percent: coveragePercent(result), import_count: result.coverage.imports.found,
@@ -82,7 +92,7 @@ export async function runAnalysis(id: string, organizationId: string, repository
     await stage(client, id, currentStage, "Selecting source files");
     currentStage = "parsing";
     await stage(client, id, currentStage, "Parsing imports and dependencies");
-    const result = await parseRepository(directory);
+    const result = await parseRepository(directory, FRAMEWORK_ADAPTERS);
     currentStage = "storing";
     await stage(client, id, currentStage, "Storing the map and coverage report");
     await storeResult(client, id, organizationId, result, archive.commitSha);

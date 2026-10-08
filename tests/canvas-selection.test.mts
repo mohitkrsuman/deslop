@@ -8,7 +8,7 @@ function folder(id: string): FolderView {
 }
 
 function edge(id: string, source: string, sourceHandle: string, target: string, targetHandle: string): EdgeView {
-  return { id, source, sourceHandle: `out:${sourceHandle}`, target, targetHandle: `in:${targetHandle}`, imports: 1, extensions: [] };
+  return { id, source, sourceHandle: `out:${sourceHandle}`, target, targetHandle: `in:${targetHandle}`, imports: 1, roles: [] };
 }
 
 const view: CanvasView = {

@@ -3,11 +3,12 @@ import { builtinModules } from "node:module";
 import { readFile, realpath, stat } from "node:fs/promises";
 import path from "node:path";
 import ts from "typescript";
+import { genericRun } from "./adapters/generic.mts";
 import { withFanCounts } from "./graph.mts";
 import { walkRepository, toRepoPath } from "./walk.mts";
 import {
   PARSER_SCHEMA_VERSION,
-  fallbackAdapter,
+  type AdapterRun,
   type Edge,
   type FileNode,
   type ImportKind,
@@ -218,16 +219,29 @@ async function resolveImport(
 }
 
 // Entry point: walks the repo, parses each source file, resolves each import,
-// and returns files, edges and a coverage report. A file that can't be read or
-// has syntax errors is skipped and counted, never partly included. Edges are
-// deduplicated per (from, to, kind).
+// and returns files, edges, routes and a coverage report. A file that can't be
+// read or has syntax errors is skipped and counted, never partly included.
+// Edges are deduplicated per (from, to, kind). Adapters are tried in the order
+// given and the first to recognise the repository assigns roles and routes;
+// with none, every file gets a generic role and there are no routes.
 export async function parseRepository(
   directory: string,
-  adapter: RepositoryAdapter = fallbackAdapter,
+  adapters: readonly RepositoryAdapter[] = [],
 ): Promise<ParserResult> {
   const root = await realpath(directory);
   if (!(await stat(root)).isDirectory()) throw new Error(`Not a directory: ${directory}`);
   const walked = await walkRepository(root);
+  const listing = {
+    root,
+    sourcePaths: walked.sourcePaths,
+    otherPaths: walked.skippedFiles.filter((file) => file.reason === "unsupported_extension").map((file) => file.path),
+  };
+  let adapter: AdapterRun | null = null;
+  for (const candidate of adapters) {
+    adapter = await candidate.detect(listing);
+    if (adapter) break;
+  }
+  adapter ??= genericRun();
   const skippedFiles = [...walked.skippedFiles];
   const skippedPaths = new Map(skippedFiles.map((file) => [file.path, file]));
   const parsed = new Map<string, { node: FileNode; imports: FoundImport[] }>();
@@ -254,7 +268,7 @@ export async function parseRepository(
           path: relativePath,
           folder: toRepoPath(path.dirname(relativePath)) || ".",
           moduleId,
-          kind: adapter.classifyFile({ path: relativePath, moduleId }),
+          kind: adapter.roleOf({ path: relativePath, source }),
           lineCount: lineCount(contents),
           sha256: createHash("sha256").update(bytes).digest("hex"),
           fanIn: 0,
@@ -295,6 +309,7 @@ export async function parseRepository(
     edges.push(edge);
   }
 
+  const { routes, notes: routeNotes } = adapter.finish();
   const files = withFanCounts([...parsed.values()].map((item) => item.node), edges);
   const statusCount = (status: ImportObservation["status"]): number =>
     imports.filter((item) => item.status === status).length;
@@ -305,6 +320,7 @@ export async function parseRepository(
     files,
     edges,
     imports,
+    routes,
     coverage: {
       filesFound: walked.filesFound,
       filesParsed: files.length,
@@ -312,6 +328,7 @@ export async function parseRepository(
       skippedFiles,
       skippedDirectories: walked.skippedDirectories,
       configurationWarnings: compilerOptions.warnings,
+      routeNotes,
       imports: {
         found: imports.length,
         resolved: statusCount("resolved"),

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { GraphWalk } from "@/components/canvas/graph-walk";
 import { PathList } from "@/components/canvas/path-list";
 import { extensionOf, type Category } from "@/lib/canvas/categories";
+import { GENERIC_ROLES, taxonomyFor } from "@/lib/taxonomy.mts";
 import type { DetailIndex } from "@/lib/canvas/details";
 import type { Folding, FoldedGroup } from "@/lib/canvas/fold";
 import { type HoverTarget, type Selection } from "@/lib/canvas/selection";
@@ -14,6 +15,7 @@ interface DetailPaneProps {
   name: string;
   adapter: string;
   importCount: number;
+  routeCount: number;
   files: FileNode[];
   categories: Category[];
   folding: Folding;
@@ -43,8 +45,8 @@ function SectionTitle({ title, count }: { title: string; count?: number }) {
 }
 
 function RepositorySummary(props: DetailPaneProps) {
-  const { name, adapter, importCount, files, index, folding, hovered, onSelectFile, onHoverChange } = props;
-  const framework = adapter === "fallback" ? "Not detected" : adapter;
+  const { name, adapter, importCount, routeCount, files, index, folding, hovered, onSelectFile, onHoverChange } = props;
+  const framework = taxonomyFor(adapter).framework ?? "Not detected";
   return (
     <div className="min-w-0">
       <header className="border-b border-border px-4 py-4">
@@ -55,7 +57,7 @@ function RepositorySummary(props: DetailPaneProps) {
       <dl className="grid grid-cols-2 gap-2 px-4 py-4">
         <Metric label="Files" value={files.length} />
         <Metric label="Imports" value={importCount} />
-        <Metric label="Routes" value={index.routeCount} />
+        <Metric label="Routes" value={routeCount} />
         <Metric label="Unidentified" value={index.unidentifiedCount} />
       </dl>
       <section className="border-t border-border px-4 py-4">
@@ -89,7 +91,8 @@ function RepositorySummary(props: DetailPaneProps) {
 }
 
 function FileStructure({ file, props }: { file: FileNode; props: DetailPaneProps }) {
-  const { index, folding, hovered, onSelectFile, onHoverChange } = props;
+  const { categories, index, folding, hovered, onSelectFile, onHoverChange } = props;
+  const role = file.kind === GENERIC_ROLES.other ? "Unidentified" : categories.find((category) => category.role === file.kind)?.label ?? "Unidentified";
   const dependencies = index.dependencies.get(file.path) ?? [];
   const dependents = index.dependents.get(file.path) ?? [];
   return (
@@ -100,7 +103,7 @@ function FileStructure({ file, props }: { file: FileNode; props: DetailPaneProps
         <Metric label="Depends on" value={dependencies.length} />
         <Metric label="Depended on by" value={dependents.length} />
       </dl>
-      <p className="px-4 pb-4 text-[11px] text-muted">Convention: {file.kind === "module" ? "Unidentified" : file.kind}</p>
+      <p className="px-4 pb-4 text-[11px] text-muted">Role: {role}</p>
       <GraphWalk key={file.path} path={file.path} graph={index} folding={folding} hovered={hovered} onSelectFile={onSelectFile} onHoverChange={onHoverChange} />
       <section className="border-t border-border px-4 py-4">
         <SectionTitle title="Depends on" count={dependencies.length} />
@@ -120,19 +123,19 @@ function FolderStructure({ group, props }: { group: FoldedGroup; props: DetailPa
   const { categories, folding, hovered, index, onSelectFile, onHoverChange } = props;
   const counts = new Map<string, number>();
   for (const path of group.files) {
-    const extension = extensionOf(path);
-    counts.set(extension, (counts.get(extension) ?? 0) + 1);
+    const role = index.fileByPath.get(path)?.kind;
+    if (role !== undefined) counts.set(role, (counts.get(role) ?? 0) + 1);
   }
   return (
     <>
       <section className="px-4 py-4">
-        <SectionTitle title="Files by type" count={group.files.length} />
+        <SectionTitle title="Files by role" count={group.files.length} />
         <ul className="mt-3 space-y-2">
-          {categories.filter((category) => counts.has(category.extension)).map((category) => (
-            <li key={category.extension} className="flex items-center gap-2">
-              <span aria-hidden="true" className="size-2 shrink-0" style={{ background: category.color }} />
-              <span className="min-w-0 flex-1 font-mono text-[11px]">{category.extension}</span>
-              <span className="font-mono tabular-nums text-muted">{counts.get(category.extension)}</span>
+          {categories.filter((category) => counts.has(category.role)).map((category) => (
+            <li key={category.role} className="flex items-center gap-2">
+              <span aria-hidden="true" className="size-2 shrink-0" style={{ background: category.color ?? "transparent" }} />
+              <span className="min-w-0 flex-1 text-[11px]">{category.label}</span>
+              <span className="font-mono tabular-nums text-muted">{counts.get(category.role)}</span>
             </li>
           ))}
         </ul>
