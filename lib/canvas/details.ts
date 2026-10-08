@@ -1,4 +1,5 @@
 import type { Edge, FileNode } from "../parser/types.mts";
+import { buildGraphIndex } from "../graph/graph.ts";
 
 export interface DetailIndex {
   fileByPath: Map<string, FileNode>;
@@ -14,16 +15,7 @@ export interface DetailIndex {
 // counts describe distinct neighbouring files, matching the parser's fan counts.
 export function buildDetailIndex(files: FileNode[], edges: Edge[]): DetailIndex {
   const fileByPath = new Map(files.map((file) => [file.path, file]));
-  const dependencies = new Map(files.map((file) => [file.path, new Set<string>()]));
-  const dependents = new Map(files.map((file) => [file.path, new Set<string>()]));
-
-  for (const edge of edges) {
-    dependencies.get(edge.from)?.add(edge.to);
-    dependents.get(edge.to)?.add(edge.from);
-  }
-
-  const dependencyLists = new Map([...dependencies].map(([path, paths]) => [path, [...paths].sort()]));
-  const dependentLists = new Map([...dependents].map(([path, paths]) => [path, [...paths].sort()]));
+  const { dependencies: dependencyLists, dependents: dependentLists } = buildGraphIndex(files, edges);
   const incomingCount = (file: FileNode) => dependentLists.get(file.path)?.length ?? 0;
   const outgoingCount = (file: FileNode) => dependencyLists.get(file.path)?.length ?? 0;
 

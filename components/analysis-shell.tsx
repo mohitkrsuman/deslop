@@ -13,7 +13,7 @@ export function AnalysisShell({
   detail?: ReactNode;
 }) {
   return (
-    <div className="grid h-dvh grid-cols-[13rem_minmax(0,1fr)_18rem] bg-background text-xs text-foreground">
+    <div className="grid h-full min-h-0 grid-cols-[13rem_minmax(0,1fr)_18rem] bg-background text-xs text-foreground">
       <aside aria-label="Categories" className="min-h-0 overflow-y-auto border-r border-border bg-surface">
         {rail}
       </aside>

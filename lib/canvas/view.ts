@@ -1,6 +1,7 @@
 import type { Edge, FileNode } from "../parser/types.mts";
 import type { Folding } from "./fold.ts";
 import { shortestUniqueLabels } from "./labels.ts";
+import { extensionOf } from "./categories.ts";
 
 // Sizes are computed here, not measured in the browser, so the layout has them
 // up front and the same data always gives the same picture.
@@ -64,6 +65,8 @@ export interface EdgeView {
   targetHandle: string;
   // How many file-to-file imports this one line stands for.
   imports: number;
+  // File categories touching this aggregated edge, for dimming without refolding.
+  extensions: string[];
 }
 
 export interface CanvasView {
@@ -125,7 +128,8 @@ export function buildCanvasView(
     const fileCount = group.files.length;
     const fanIn = dependents.get(group.folder)?.size ?? 0;
     const fanOut = dependencies.get(group.folder)?.size ?? 0;
-    const meta = `${fileCount} files  in ${fanIn}  out ${fanOut}`;
+    // Reserve room for category counts so filtering never moves the graph.
+    const meta = `${fileCount}/${fileCount} match  in ${fanIn}  out ${fanOut}`;
 
     if (!open) {
       for (const file of group.files) anchor.set(file, { node: id, handle: NODE_HANDLE });
@@ -205,6 +209,9 @@ export function buildCanvasView(
     const existing = merged.get(id);
     if (existing) {
       existing.imports += 1;
+      for (const extension of [extensionOf(edge.from), extensionOf(edge.to)]) {
+        if (!existing.extensions.includes(extension)) existing.extensions.push(extension);
+      }
     } else {
       merged.set(id, {
         id,
@@ -213,6 +220,7 @@ export function buildCanvasView(
         target: to.node,
         targetHandle: `in:${to.handle}`,
         imports: 1,
+        extensions: [...new Set([extensionOf(edge.from), extensionOf(edge.to)])],
       });
     }
   }

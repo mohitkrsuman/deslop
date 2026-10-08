@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "parse:repo": "node --experimental-strip-types scripts/parse-repository.mts",
-    "test:parser": "node --experimental-strip-types --test tests/parser.test.mts"
+    "test:parser": "node --experimental-strip-types --test tests/parser.test.mts tests/github-archive.test.mts",
+    "test:graph": "node --experimental-strip-types --test tests/graph-analysis.test.mts tests/canvas-categories.test.mts"
   },
   "dependencies": {
     "@clerk/nextjs": "^7.9.10",

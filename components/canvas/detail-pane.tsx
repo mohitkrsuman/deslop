@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import { GraphWalk } from "@/components/canvas/graph-walk";
+import { PathList } from "@/components/canvas/path-list";
 import { extensionOf, type Category } from "@/lib/canvas/categories";
 import type { DetailIndex } from "@/lib/canvas/details";
 import type { Folding, FoldedGroup } from "@/lib/canvas/fold";
@@ -37,54 +39,6 @@ function SectionTitle({ title, count }: { title: string; count?: number }) {
       <h3 className="text-[10px] font-semibold uppercase tracking-wide text-muted">{title}</h3>
       {count !== undefined && <span className="font-mono text-[10px] tabular-nums text-muted">{count}</span>}
     </div>
-  );
-}
-
-function PathList({
-  paths,
-  folding,
-  hovered,
-  onSelectFile,
-  onHoverChange,
-  trailing,
-  ranked = false,
-}: {
-  paths: string[];
-  folding: Folding;
-  hovered: HoverTarget;
-  onSelectFile: (path: string) => void;
-  onHoverChange: (target: HoverTarget) => void;
-  trailing?: (path: string) => string;
-  ranked?: boolean;
-}) {
-  const List = ranked ? "ol" : "ul";
-  return (
-    <List className="mt-2 space-y-0.5">
-      {paths.map((path, index) => {
-        const highlighted = hovered?.kind === "file" ? hovered.path === path
-          : hovered?.kind === "folder" && folding.groupOf.get(path) === hovered.folder;
-        return (
-          <li key={path}>
-            <button
-              type="button"
-              title={path}
-              onClick={() => onSelectFile(path)}
-              onMouseEnter={() => onHoverChange({ kind: "file", path })}
-              onMouseLeave={() => onHoverChange(null)}
-              onFocus={() => onHoverChange({ kind: "file", path })}
-              onBlur={() => onHoverChange(null)}
-              className={`flex w-full cursor-pointer items-start gap-2 px-1 py-1 text-left hover:bg-accent/10 hover:text-accent focus-visible:bg-accent/10 focus-visible:text-accent ${
-                highlighted ? "bg-accent/10 text-accent" : ""
-              }`}
-            >
-              {ranked && <span className="shrink-0 font-mono text-[10px] tabular-nums text-muted">{index + 1}.</span>}
-              <span className="min-w-0 flex-1 break-all font-mono text-[10px] leading-4">{path}</span>
-              {trailing && <span className="shrink-0 font-mono text-[10px] tabular-nums text-muted">{trailing(path)}</span>}
-            </button>
-          </li>
-        );
-      })}
-    </List>
   );
 }
 
@@ -147,6 +101,7 @@ function FileStructure({ file, props }: { file: FileNode; props: DetailPaneProps
         <Metric label="Depended on by" value={dependents.length} />
       </dl>
       <p className="px-4 pb-4 text-[11px] text-muted">Convention: {file.kind === "module" ? "Unidentified" : file.kind}</p>
+      <GraphWalk key={file.path} path={file.path} graph={index} folding={folding} hovered={hovered} onSelectFile={onSelectFile} onHoverChange={onHoverChange} />
       <section className="border-t border-border px-4 py-4">
         <SectionTitle title="Depends on" count={dependencies.length} />
         {dependencies.length > 0 ? <PathList paths={dependencies} folding={folding} hovered={hovered} onSelectFile={onSelectFile} onHoverChange={onHoverChange} />
