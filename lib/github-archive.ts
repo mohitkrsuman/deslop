@@ -1,15 +1,14 @@
-import { createReadStream, createWriteStream } from "node:fs";
-import { mkdtemp, mkdir, open, rm } from "node:fs/promises";
+import { createWriteStream } from "node:fs";
+import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
-import { createGunzip } from "node:zlib";
+import { extract, type ReadEntry, type Unpack } from "tar";
 
 const MAX_ARCHIVE_BYTES = 1024 * 1024 * 1024;
 const MAX_UNPACKED_BYTES = 8 * 1024 * 1024 * 1024;
 const MAX_FILES = 12000;
-const MAX_PAX_BYTES = 1024 * 1024;
 
 export function parseGithubUrl(input: string) {
   let url: URL;
@@ -61,140 +60,45 @@ async function downloadArchive(response: Response, archivePath: string) {
   await pipeline(Readable.from(chunks()), createWriteStream(archivePath));
 }
 
-function tarText(bytes: Buffer, start: number, length: number): string {
-  return bytes.subarray(start, start + length).toString("utf8").split("\0", 1)[0];
-}
-
-class TarReader {
-  private iterator: AsyncIterator<Buffer>;
-  private current = Buffer.alloc(0);
-  private offset = 0;
-  private unpackedBytes = 0;
-
-  constructor(chunks: AsyncIterable<Buffer>) {
-    this.iterator = chunks[Symbol.asyncIterator]();
-  }
-
-  async take(maxBytes: number): Promise<Buffer | null> {
-    while (this.offset === this.current.length) {
-      const next = await this.iterator.next();
-      if (next.done) return null;
-      this.current = Buffer.from(next.value);
-      this.offset = 0;
-      this.unpackedBytes += this.current.length;
-      if (this.unpackedBytes > MAX_UNPACKED_BYTES) {
-        throw new Error("Repository archive exceeds the 8 GB unpacked limit.");
-      }
-    }
-    const chunk = this.current.subarray(this.offset, this.offset + maxBytes);
-    this.offset += chunk.length;
-    return chunk;
-  }
-
-  async exactly(length: number): Promise<Buffer | null> {
-    const parts: Buffer[] = [];
-    let remaining = length;
-    while (remaining > 0) {
-      const chunk = await this.take(remaining);
-      if (!chunk) {
-        if (remaining === length) return null;
-        throw new Error("GitHub returned an invalid archive.");
-      }
-      parts.push(chunk);
-      remaining -= chunk.length;
-    }
-    return Buffer.concat(parts, length);
-  }
-
-  async skip(length: number) {
-    let remaining = length;
-    while (remaining > 0) {
-      const chunk = await this.take(remaining);
-      if (!chunk) throw new Error("GitHub returned an invalid archive.");
-      remaining -= chunk.length;
-    }
-  }
-}
-
 async function extractArchive(archivePath: string, directory: string) {
-  const source = createReadStream(archivePath);
-  const gunzip = createGunzip();
-  source.on("error", (error) => gunzip.destroy(error));
-  source.pipe(gunzip);
-  const reader = new TarReader(gunzip);
-  let count = 0;
-  let pendingPath: string | null = null;
-
-  try {
-    while (true) {
-      const header = await reader.exactly(512);
-      if (!header) break;
-      if (header.every((value) => value === 0)) {
-        // Read the gzip trailer as well, so truncated or corrupt downloads fail.
-        while (await reader.take(64 * 1024)) { /* drain */ }
-        break;
+  let files = 0;
+  let unpackedBytes = 0;
+  await extract({
+    file: archivePath,
+    cwd: directory,
+    strip: 1,
+    strict: true,
+    preservePaths: false,
+    preserveOwner: false,
+    noMtime: true,
+    filter(this: Unpack, entryPath, rawEntry) {
+      const entry = rawEntry as ReadEntry;
+      const reject = (message: string) => {
+        this.abort(new Error(message));
+        return false;
+      };
+      if (!Number.isSafeInteger(entry.size) || entry.size < 0) {
+        return reject("GitHub returned an invalid archive.");
       }
-      const rawSize = tarText(header, 124, 12).trim();
-      const size = Number.parseInt(rawSize || "0", 8);
-      if (!Number.isSafeInteger(size) || size < 0 || size > MAX_UNPACKED_BYTES) {
-        throw new Error("GitHub returned an invalid archive.");
+      unpackedBytes += 512 + Math.ceil(entry.size / 512) * 512;
+      if (unpackedBytes > MAX_UNPACKED_BYTES) {
+        return reject("Repository archive exceeds the 8 GB unpacked limit.");
       }
 
-      const type = String.fromCharCode(header[156]);
-      const name = pendingPath ?? [tarText(header, 345, 155), tarText(header, 0, 100)].filter(Boolean).join("/");
-      pendingPath = null;
-
-      if (type === "x") {
-        if (size > MAX_PAX_BYTES) throw new Error("GitHub returned an invalid archive.");
-        const body = await reader.exactly(size);
-        if (!body) throw new Error("GitHub returned an invalid archive.");
-        const match = body.toString("utf8").match(/(?:^|\n)\d+ path=([^\n]+)/);
-        pendingPath = match?.[1] ?? null;
-      } else if (type === "0" || type === "\0" || type === "5") {
-        const relative = name.split("/").slice(1).join("/");
-        const segments = relative.split("/").filter(Boolean);
-        if (segments.some((part) => part === ".." || part === "." || part.includes("\\")) || path.isAbsolute(relative)) {
-          throw new Error("GitHub archive contains an unsafe path.");
-        }
-        if (segments.length > 0) {
-          const destination = path.join(directory, ...segments);
-          if (type === "5") {
-            await mkdir(destination, { recursive: true });
-          } else {
-            count += 1;
-            if (count > MAX_FILES) throw new Error("Repository has too many files to analyze.");
-            await mkdir(path.dirname(destination), { recursive: true });
-            const file = await open(destination, "w");
-            try {
-              let remaining = size;
-              while (remaining > 0) {
-                const chunk = await reader.take(remaining);
-                if (!chunk) throw new Error("GitHub returned an invalid archive.");
-                let written = 0;
-                while (written < chunk.length) {
-                  const result = await file.write(chunk, written, chunk.length - written);
-                  written += result.bytesWritten;
-                }
-                remaining -= chunk.length;
-              }
-            } finally {
-              await file.close();
-            }
-          }
-        } else {
-          await reader.skip(size);
-        }
-        if (type === "5") await reader.skip(size);
-      } else {
-        await reader.skip(size);
+      const segments = entryPath.replace(/\/$/, "").split("/");
+      if (path.posix.isAbsolute(entryPath) || path.win32.isAbsolute(entryPath) ||
+          segments.some((part) => !part || part === "." || part === ".." || part.includes("\\") || part.includes(":"))) {
+        return reject("GitHub archive contains an unsafe path.");
       }
-      await reader.skip((512 - size % 512) % 512);
-    }
-    if (count === 0) throw new Error("Repository archive contains no files.");
-  } finally {
-    gunzip.destroy();
-    source.destroy();
-  }
+      if (segments.length < 2) return false;
+      if (entry.type === "Directory") return true;
+      if (entry.type !== "File" && entry.type !== "OldFile" && entry.type !== "ContiguousFile") return false;
+      files += 1;
+      if (files > MAX_FILES) return reject("Repository has too many files to analyze.");
+      return true;
+    },
+  });
+  if (files === 0) throw new Error("Repository archive contains no files.");
 }
 
 export async function fetchGithubArchive(repository: ReturnType<typeof parseGithubUrl>) {
