@@ -28,7 +28,7 @@ export function Shell({
           <UserButton />
         </div>
       </header>
-      <main className={fillViewport ? "min-h-0 flex-1 overflow-hidden" : "flex-1"}>{children}</main>
+      <main className={fillViewport ? "min-h-0 flex-1 overflow-auto" : "flex-1"}>{children}</main>
     </div>
   );
 }

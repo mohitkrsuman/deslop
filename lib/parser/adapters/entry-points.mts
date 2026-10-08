@@ -10,7 +10,7 @@ const PAGES_ENTRY = /(?:^|\/)pages\/.+\.(?:[cm]?[jt]sx?)$/;
 const ROOT_HOOK = /^(?:(?:apps|packages|examples)\/[^/]+\/)?(?:src\/)?(?:middleware|proxy|instrumentation|instrumentation-client)\.(?:[cm]?[jt]sx?)$/;
 
 // Keep convention knowledge outside the graph and parser. The fallback
-// snapshot has no framework kinds, so also recognize conventional entry paths.
+// adapter has no framework kinds, so also recognize conventional entry paths.
 // This is an exclusion safeguard, not a claim that other files are unused.
 export function isConventionEntryPoint(file: FileNode): boolean {
   if (ENTRY_KINDS.has(file.kind.toLowerCase())) return true;

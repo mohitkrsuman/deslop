@@ -17,5 +17,5 @@ export default async function WorkspaceLayout({
   // render bails out before the client asks auth() for that token.
   createServerSupabaseClient();
 
-  return <Shell theme={theme}>{children}</Shell>;
+  return <Shell theme={theme} fillViewport>{children}</Shell>;
 }

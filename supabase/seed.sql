@@ -11,7 +11,6 @@ on conflict (id) do nothing;
 insert into public.analyses (id, organization_id, project_id, name, status)
 values
   ('11000000-0000-0000-0000-000000000001', 'org_deslop_alpha', '10000000-0000-0000-0000-000000000001', 'Alpha service · initial map', 'complete'),
-  ('12000000-0000-0000-0000-000000000002', 'org_deslop_alpha', '10000000-0000-0000-0000-000000000001', 'Alpha service · latest run', 'analyzing'),
   ('21000000-0000-0000-0000-000000000001', 'org_deslop_beta', '20000000-0000-0000-0000-000000000002', 'Beta service · initial map', 'queued')
 on conflict (id) do nothing;
 

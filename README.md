@@ -1,49 +1,25 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# DeSlop
 
-## Repository parser
+DeSlop maps imports in a public GitHub repository for a Clerk organization. The dashboard accepts a repository URL, shows live pipeline progress, and opens the stored graph.
 
-Run the standalone TypeScript/JavaScript parser against a directory on disk:
+## Setup
 
-```bash
-pnpm parse:repo path/to/repository --output analysis.json
+Install dependencies with `pnpm install`. Set these server and public environment variables:
+
+```text
+NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=
+CLERK_SECRET_KEY=
+NEXT_PUBLIC_SUPABASE_URL=
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=
+SUPABASE_SECRET_KEY=
 ```
 
-It prints file and import coverage, every skipped path and reason, unresolved imports,
-re-export totals, edges, and distinct folders. The versioned JSON result has its
-TypeScript contract in `lib/parser/types.mts`; `readParserResult` validates it when
-loaded. Run `pnpm test:parser` for the parser checks. No application server is needed.
+`SUPABASE_SECRET_KEY` is a server-only Supabase secret key for inserting projects, analyses, files, and edges. A legacy `SUPABASE_SERVICE_ROLE_KEY` is also accepted. Never prefix either with `NEXT_PUBLIC_`. The existing Clerk/Supabase integration must supply an organization claim in the Clerk session token.
 
-## Getting Started
+Apply `supabase/migrations/20261008094000_phase_07_pipeline.sql` after the earlier migrations. This adds the one-analysis constraint, coverage data, progress trigger, and private Realtime subscription policy. The migration keeps the newest row when an older organization has duplicate project URLs or duplicate analyses for a project. Realtime must be enabled for the Supabase project; clients join private channels using their Clerk session token.
 
-First, run the development server:
+Run `pnpm dev` and open the dashboard. Paste an `https://github.com/owner/repo` URL. GitHub's public API and archive download are used without a repository scope or stored GitHub token. Re-run an existing repository from its analysis page. The worker runs after the form response, within the route's 300-second maximum duration. A deployment platform must support that duration; if it stops early, the dashboard labels the stage stale after five minutes.
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+## Parser and checks
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
-
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
-
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Run `pnpm parse:repo path/to/repository --output analysis.json` to inspect a local repository independently. `pnpm test:parser`, `pnpm test:graph`, `pnpm exec eslint app components lib tests proxy.ts`, and `pnpm build` check the parser and app.

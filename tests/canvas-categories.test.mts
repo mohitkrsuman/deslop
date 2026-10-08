@@ -1,10 +1,9 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { categoriesOf, categoryFilterFor } from "../lib/canvas/categories.ts";
 import { foldDirectories } from "../lib/canvas/fold.ts";
 import { buildCanvasView, SIZES } from "../lib/canvas/view.ts";
-import type { Edge, FileNode, ParserResult } from "../lib/parser/types.mts";
+import type { Edge, FileNode } from "../lib/parser/types.mts";
 
 test("category counts include hidden rows and folded groups without removing files or edges", () => {
   const files: FileNode[] = Array.from({ length: 30 }, (_, i) => {
@@ -33,12 +32,16 @@ test("category counts include hidden rows and folded groups without removing fil
   assert.equal(categoryFilterFor(files, folding, null), null);
 });
 
-test("all snapshot category counts reconcile across every folded and open panel", async () => {
-  const snapshot: ParserResult = JSON.parse(await readFile(new URL("../data/preview/excalidraw.json", import.meta.url), "utf8"));
-  const folding = foldDirectories(snapshot.files);
-  const view = buildCanvasView(snapshot.files, snapshot.edges, folding, new Set(folding.groups.map((group) => group.folder)));
-  for (const category of categoriesOf(snapshot.files)) {
-    const filter = categoryFilterFor(snapshot.files, folding, category.extension)!;
+test("category counts reconcile across every folded and open panel", () => {
+  const files: FileNode[] = Array.from({ length: 65 }, (_, index) => {
+    const folder = `packages/${Math.floor(index / 13)}`;
+    const path = `${folder}/module-${index}.${index % 4 === 0 ? "tsx" : "ts"}`;
+    return { path, folder, kind: "module", moduleId: path, lineCount: 1, sha256: "", fanIn: 0, fanOut: 0 };
+  });
+  const folding = foldDirectories(files);
+  const view = buildCanvasView(files, [], folding, new Set(folding.groups.map((group) => group.folder)));
+  for (const category of categoriesOf(files)) {
+    const filter = categoryFilterFor(files, folding, category.extension)!;
     assert.equal([...filter.counts.values()].reduce((sum, count) => sum + count, 0), category.count);
     for (const panel of view.nodes) {
       assert.ok(panel.kind === "panel");

@@ -13,6 +13,9 @@ import {
   type Edge as FlowEdge,
   type Node as FlowNode,
   type NodeProps,
+  type NodeChange,
+  type NodePositionChange,
+  type XYPosition,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
@@ -102,7 +105,7 @@ function FolderNode({ data }: NodeProps<FolderNodeType>) {
       onFocus={() => hoverFolder(view.folder)}
       onBlur={clearHover}
       title={view.folder}
-      className={`flex h-full w-full cursor-pointer flex-col items-start border bg-surface px-3 py-1.5 text-left ${
+      className={`canvas-drag-handle flex h-full w-full cursor-grab flex-col items-start border bg-surface px-3 py-1.5 text-left active:cursor-grabbing ${
         data.selected || data.hovered ? "border-accent" : "border-border"
       } ${data.dim ? "opacity-25" : ""}`}
     >
@@ -185,7 +188,7 @@ function PanelNode({ data }: NodeProps<PanelNodeType>) {
         onFocus={() => hoverFolder(view.folder)}
         onBlur={clearHover}
         title={`${view.folder} — click to fold`}
-        className="flex shrink-0 cursor-pointer flex-col items-start border-b border-border px-3 py-1.5 text-left"
+        className="canvas-drag-handle flex shrink-0 cursor-grab flex-col items-start border-b border-border px-3 py-1.5 text-left active:cursor-grabbing"
         style={{ height: SIZES.panelHeader }}
       >
         <span className="font-mono text-[11px] leading-4">{view.label}</span>
@@ -200,7 +203,7 @@ function PanelNode({ data }: NodeProps<PanelNodeType>) {
       )}
       <div
         ref={rowsElement}
-        className="canvas-file-scroll nowheel nopan min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain touch-pan-y"
+        className="canvas-file-scroll nodrag nowheel nopan min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain touch-pan-y"
         role="region"
         aria-label={`${view.folder} files`}
         tabIndex={0}
@@ -254,6 +257,8 @@ function MapCanvas({
   selection, onSelectionChange, hovered, onHoverChange,
 }: DependencyMapProps) {
   const [scrollTops, setScrollTops] = useState<ReadonlyMap<string, number>>(() => new Map());
+  // Key by folder so a manual position survives opening and folding the box.
+  const [placements, setPlacements] = useState<ReadonlyMap<string, { position: XYPosition; dragging: boolean }>>(() => new Map());
   const previousOpenFolders = useRef(openFolders);
   const { getViewport, setViewport, zoomIn, zoomOut } = useReactFlow();
   const store = useStoreApi();
@@ -267,6 +272,21 @@ function MapCanvas({
   );
   const { view, positioned } = useMemo(() => layoutFor(openFolders, scrollTops), [layoutFor, openFolders, scrollTops]);
   const highlight = useMemo(() => highlightFor(view, selection), [view, selection]);
+  const folderById = useMemo(() => new Map(view.nodes.map((node) => [node.id, node.folder])), [view]);
+  const onNodesChange = useCallback((changes: NodeChange[]) => {
+    const moves = changes.filter((change): change is NodePositionChange => change.type === "position" && change.position !== undefined);
+    if (moves.length === 0) return;
+    setPlacements((current) => {
+      const next = new Map(current);
+      for (const change of moves) {
+        const folder = folderById.get(change.id);
+        if (folder !== undefined && change.type === "position" && change.position) {
+          next.set(folder, { position: change.position, dragging: change.dragging ?? false });
+        }
+      }
+      return next;
+    });
+  }, [folderById]);
 
   // Fits against the layout *after* the change, computed here from the next
   // open set rather than read back from state, and caps zoom at the current
@@ -275,11 +295,15 @@ function MapCanvas({
     (open: ReadonlySet<string>) => {
       const { width, height } = store.getState();
       const next = layoutFor(open, scrollTops);
+      const placed = next.positioned.map((node) => {
+        const position = placements.get(node.view.folder)?.position;
+        return position ? { ...node, ...position } : node;
+      });
       setViewport(
-        getViewportForBounds(boundsOf(next.positioned), width, height, MIN_ZOOM, getViewport().zoom, FIT_PADDING),
+        getViewportForBounds(boundsOf(placed), width, height, MIN_ZOOM, getViewport().zoom, FIT_PADDING),
       );
     },
-    [layoutFor, scrollTops, store, getViewport, setViewport],
+    [layoutFor, scrollTops, placements, store, getViewport, setViewport],
   );
 
   // The pane can open a folder too. Fit after that state reaches the map, using
@@ -331,7 +355,15 @@ function MapCanvas({
         const hoveredFolder = hovered?.kind === "folder" && hovered.folder === node.folder;
         const hoveredFile = hovered?.kind === "file" && folding.groupOf.get(hovered.path) === node.folder
           ? hovered.path : null;
-        const base = { id: node.id, position: { x, y }, width: node.width, height: node.height };
+        const placement = placements.get(node.folder);
+        const base = {
+          id: node.id,
+          position: placement?.position ?? { x, y },
+          dragging: placement?.dragging ?? false,
+          dragHandle: ".canvas-drag-handle",
+          width: node.width,
+          height: node.height,
+        };
         const matchCount = categoryFilter ? categoryFilter.counts.get(node.folder) ?? 0 : null;
         return node.kind === "folder"
           ? {
@@ -357,7 +389,7 @@ function MapCanvas({
               },
             };
       }),
-    [positioned, selection, highlight, hovered, folding, categoryFilter],
+    [positioned, placements, selection, highlight, hovered, folding, categoryFilter],
   );
 
   const flowEdges = useMemo<FlowEdge[]>(
@@ -392,12 +424,13 @@ function MapCanvas({
         nodes={flowNodes}
         edges={flowEdges}
         nodeTypes={nodeTypes}
-        nodesDraggable={false}
+        nodesDraggable
+        nodeDragThreshold={4}
+        onNodesChange={onNodesChange}
+        onNodeDragStart={(_, node) => onSelectionChange({ kind: "node", id: node.id })}
         nodesConnectable={false}
         elementsSelectable={false}
-        // React Flow disables pointer events on nodes unless they are selectable,
-        // draggable, or have a node click handler. Keep our buttons interactive
-        // while preventing their clicks from reaching the pane's clear action.
+        // Keep box clicks from reaching the pane's clear-selection action.
         onNodeClick={(event) => event.stopPropagation()}
         onPaneClick={() => onSelectionChange(null)}
         minZoom={MIN_ZOOM}

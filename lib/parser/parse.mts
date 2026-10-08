@@ -125,7 +125,7 @@ class CompilerOptionsByFile {
     let directory = path.dirname(filePath);
     while (directory === this.root || insideRoot(this.root, directory)) {
       for (const configName of ["tsconfig.json", "jsconfig.json"]) {
-        const configPath = path.join(directory, configName);
+        const configPath = path.join(/* turbopackIgnore: true */ directory, configName);
         if (!await existsOnDisk(configPath)) continue;
         const cached = this.cache.get(configPath);
         if (cached) return cached;

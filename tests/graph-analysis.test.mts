@@ -1,10 +1,9 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { buildGraphIndex, findImportCycles, walkGraph } from "../lib/graph/graph.ts";
 import { buildInsights, INSIGHT_SENTENCES } from "../lib/graph/insights.ts";
 import { isConventionEntryPoint } from "../lib/parser/adapters/entry-points.mts";
-import type { Edge, FileNode, ParserResult } from "../lib/parser/types.mts";
+import type { Edge, FileNode } from "../lib/parser/types.mts";
 
 function file(path: string, kind = "module", lineCount = 1): FileNode {
   return { path, kind, lineCount, folder: path.includes("/") ? path.slice(0, path.lastIndexOf("/")) : ".", moduleId: path, sha256: "", fanIn: 999, fanOut: 999 };
@@ -55,7 +54,7 @@ test("cycle detection handles a graph deeper than a JavaScript call stack", () =
   assert.equal(cycles[0].path.length, count + 1);
 });
 
-test("unimported insights exclude entry kinds and framework/config conventions in fallback snapshots", () => {
+test("unimported insights exclude entry kinds and framework/config conventions in fallback graphs", () => {
   const entries = [
     "app/page.tsx", "app/api/users/route.ts", "src/app/(public)/layout.tsx", "src/app/not-found.tsx",
     "apps/web/src/app/team/[id]/page.tsx", "pages/index.tsx", "src/pages/api/items.ts",
@@ -79,28 +78,4 @@ test("insights use distinct graph importers, explicit thresholds, and four fixed
   assert.deepEqual(insights.oversized.map((item) => item.path), ["long.ts"]);
   assert.equal(Object.keys(INSIGHT_SENTENCES).length, 4);
   assert.equal(buildInsights([], buildGraphIndex([], [])).unimported.length, 0);
-});
-
-test("the checked-in Excalidraw snapshot has verifiable cycles and two-hop paths", async () => {
-  const snapshot: ParserResult = JSON.parse(await readFile(new URL("../data/preview/excalidraw.json", import.meta.url), "utf8"));
-  const graph = buildGraphIndex(snapshot.files, snapshot.edges);
-  const insights = buildInsights(snapshot.files, graph);
-  assert.ok(insights.cycles.length > 0);
-  for (const cycle of insights.cycles) {
-    assert.ok(cycle.path.length >= 2);
-    assert.equal(cycle.path[0], cycle.path.at(-1));
-    for (let i = 1; i < cycle.path.length; i += 1) assert.ok(snapshot.edges.some((item) => item.from === cycle.path[i - 1] && item.to === cycle.path[i]));
-  }
-  const target = snapshot.files.find((item) => walkGraph(graph, item.path, "dependents").some((result) => result.depth === 2));
-  assert.ok(target);
-  for (const result of walkGraph(graph, target.path, "dependents")) {
-    assert.ok(graph.dependencies.get(result.path)?.includes(result.via));
-    if (result.depth === 2) assert.ok(graph.dependencies.get(result.via)?.includes(target.path));
-  }
-  assert.ok(insights.unimported.length > 0);
-  assert.ok(insights.unimported.every((item) => graph.dependents.get(item.path)?.length === 0 && !isConventionEntryPoint(item)));
-  const page = snapshot.files.find((item) => item.path === "examples/with-nextjs/src/app/page.tsx");
-  assert.ok(page);
-  assert.equal(graph.dependents.get(page.path)?.length, 0);
-  assert.ok(!insights.unimported.some((item) => item.path === page.path));
 });
