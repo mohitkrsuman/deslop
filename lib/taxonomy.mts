@@ -175,6 +175,17 @@ const TAXONOMIES: Record<string, Taxonomy> = {
       ...GENERIC_CATEGORIES,
     ],
   },
+  express: {
+    framework: "Express",
+    categories: [
+      ...ROUTE_CATEGORIES,
+      ...CONTROLLER_CATEGORIES,
+      ...APPLICATION_CATEGORIES,
+      ...MODEL_CATEGORIES,
+      ...SHARED_CATEGORIES,
+      ...GENERIC_CATEGORIES,
+    ],
+  },
   react: {
     framework: "React",
     categories: [

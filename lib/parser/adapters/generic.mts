@@ -108,18 +108,20 @@ const FOLDER_ROLES: Record<string, string> = {
   helpers: APPLICATION_ROLES.utility,
 };
 
-function conventionRole(path: string, name: string): string | null {
-  const stem = name.slice(0, name.lastIndexOf("."));
-  const suffix = stem.slice(stem.lastIndexOf(".") + 1).toLowerCase();
-  const bySuffix = FILE_SUFFIX_ROLES[suffix];
-  if (bySuffix) return bySuffix;
-
+// Returns the role assigned by the nearest conventional parent directory.
+export function genericFolderRole(path: string): string | null {
   const folders = path.split("/").slice(0, -1).reverse();
   for (const folder of folders) {
     const byFolder = FOLDER_ROLES[folder.toLowerCase()];
     if (byFolder) return byFolder;
   }
   return null;
+}
+
+function conventionRole(path: string, name: string): string | null {
+  const stem = name.slice(0, name.lastIndexOf("."));
+  const suffix = stem.slice(stem.lastIndexOf(".") + 1).toLowerCase();
+  return FILE_SUFFIX_ROLES[suffix] ?? genericFolderRole(path);
 }
 
 // Shared application roles come from conventional file suffixes and folder

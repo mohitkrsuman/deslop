@@ -33,7 +33,13 @@ async function main(): Promise<void> {
   console.log(`Files skipped: ${coverage.filesSkipped}`);
   console.log(`Distinct folders: ${folders.size}`);
   console.log(`Edges: ${result.edges.length}`);
-  console.log(`Imports: ${coverage.imports.found} (${coverage.imports.resolved} resolved, ${coverage.imports.external} external, ${coverage.imports.excluded} excluded, ${coverage.imports.unresolved} unresolved)`);
+  console.log(`Module references: ${coverage.imports.found} (${coverage.imports.resolved} resolved, ${coverage.imports.external} external, ${coverage.imports.excluded} excluded, ${coverage.imports.unresolved} unresolved)`);
+  const commonjsFiles = result.files.filter((file) => (file.commonjsExports?.length ?? 0) > 0);
+  const commonjsExportCount = commonjsFiles.reduce((count, file) => count + (file.commonjsExports?.length ?? 0), 0);
+  console.log(`CommonJS export names: ${commonjsExportCount} across ${commonjsFiles.length} files`);
+  for (const file of commonjsFiles) {
+    console.log(`EXPORTS ${file.path}: ${file.commonjsExports?.join(", ") ?? ""}`);
+  }
   console.log(`Re-exports: ${reExports.length} found, ${resolvedReExports.length} resolved`);
   const roles = new Map<string, number>();
   for (const file of result.files) roles.set(file.kind, (roles.get(file.kind) ?? 0) + 1);

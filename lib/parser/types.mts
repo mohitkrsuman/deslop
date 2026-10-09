@@ -2,7 +2,7 @@ import type ts from "typescript";
 
 export const PARSER_SCHEMA_VERSION = 2 as const;
 
-export type ImportKind = "import" | "re-export" | "dynamic-import";
+export type ImportKind = "import" | "re-export" | "dynamic-import" | "require";
 
 export type SkipReason =
   | "unsupported_extension"
@@ -28,6 +28,8 @@ export interface FileNode {
   folder: string;
   moduleId: string;
   kind: string;
+  // Statically named CommonJS exports; absent on rows loaded from older analyses.
+  commonjsExports?: string[];
   lineCount: number;
   sha256: string;
   fanIn: number;

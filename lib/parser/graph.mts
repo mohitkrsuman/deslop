@@ -1,8 +1,8 @@
 import type { Edge, FileNode } from "./types.mts";
 
-// Returns the files with fanIn (distinct files importing it) and fanOut
-// (distinct files it imports). Distinct, so an import and a re-export between
-// the same pair count once.
+// Returns the files with fanIn (distinct files depending on it) and fanOut
+// (distinct files it depends on). Distinct, so multiple reference kinds
+// between the same pair count once.
 export function withFanCounts(files: FileNode[], edges: Edge[]): FileNode[] {
   const incoming = new Map<string, Set<string>>();
   const outgoing = new Map<string, Set<string>>();

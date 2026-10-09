@@ -62,7 +62,7 @@ export interface EdgeView {
   sourceHandle: string;
   target: string;
   targetHandle: string;
-  // How many file-to-file imports this one line stands for.
+  // How many file-to-file references this one line stands for.
   imports: number;
   // File roles touching this aggregated edge, for dimming without refolding.
   roles: string[];

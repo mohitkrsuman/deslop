@@ -56,13 +56,13 @@ function RepositorySummary(props: DetailPaneProps) {
       </header>
       <dl className="grid grid-cols-2 gap-2 px-4 py-4">
         <Metric label="Files" value={files.length} />
-        <Metric label="Imports" value={importCount} />
+        <Metric label="Module references" value={importCount} />
         <Metric label="Routes" value={routeCount} />
         <Metric label="Unidentified" value={index.unidentifiedCount} />
       </dl>
       <section className="border-t border-border px-4 py-4">
         <SectionTitle title="Most depended on" count={Math.min(index.mostDependedOn.length, 10)} />
-        <p className="mt-1 text-[11px] text-muted">Files with the most direct importers.</p>
+        <p className="mt-1 text-[11px] text-muted">Files with the most direct dependents.</p>
         <PathList
           paths={index.mostDependedOn.slice(0, 10).map((file) => file.path)}
           folding={folding}

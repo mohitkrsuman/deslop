@@ -45,9 +45,9 @@ function lineCount(contents: string): number {
   return /(?:\r\n|\r|\n)$/.test(contents) ? lines - 1 : lines;
 }
 
-// Finds every import, `export ... from` and `import()` in a file, with its line.
-// A dynamic import with a non-literal argument is kept and flagged so it can be
-// reported as excluded rather than silently dropped.
+// Finds imports, re-exports, literal require() calls and import() in a file,
+// with their lines. A dynamic import with a non-literal argument is kept and
+// flagged so it can be reported as excluded rather than silently dropped.
 function collectImports(source: ts.SourceFile): FoundImport[] {
   const found: FoundImport[] = [];
   // Records one import at the line where its node starts.
@@ -66,6 +66,12 @@ function collectImports(source: ts.SourceFile): FoundImport[] {
     } else if (ts.isExportDeclaration(node) && node.moduleSpecifier &&
                ts.isStringLiteralLike(node.moduleSpecifier)) {
       add("re-export", node.moduleSpecifier.text, node);
+    } else if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) &&
+               node.expression.text === "require") {
+      const argument = node.arguments[0];
+      if (argument && ts.isStringLiteralLike(argument)) {
+        add("require", argument.text, node);
+      }
     } else if (ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword) {
       const argument = node.arguments[0];
       if (argument && ts.isStringLiteralLike(argument)) {
@@ -78,6 +84,63 @@ function collectImports(source: ts.SourceFile): FoundImport[] {
   }
   visit(source);
   return found;
+}
+
+// Names written directly to `exports` / `module.exports`. Computed runtime
+// names and object spreads cannot be enumerated from syntax alone.
+function collectCommonJsExports(source: ts.SourceFile): string[] {
+  const names = new Set<string>();
+
+  function staticPropertyName(name: ts.PropertyName): string | null {
+    if (ts.isIdentifier(name) || ts.isStringLiteralLike(name) || ts.isNumericLiteral(name)) return name.text;
+    if (ts.isComputedPropertyName(name) && ts.isStringLiteralLike(name.expression)) return name.expression.text;
+    return null;
+  }
+
+  function isModuleExports(expression: ts.Expression): boolean {
+    return ts.isPropertyAccessExpression(expression) && ts.isIdentifier(expression.expression) &&
+      expression.expression.text === "module" && expression.name.text === "exports";
+  }
+
+  function isExportObject(expression: ts.Expression): boolean {
+    return (ts.isIdentifier(expression) && expression.text === "exports") || isModuleExports(expression);
+  }
+
+  function addObjectProperties(expression: ts.Expression): void {
+    if (!ts.isObjectLiteralExpression(expression)) return;
+    for (const property of expression.properties) {
+      if (!ts.isPropertyAssignment(property) && !ts.isShorthandPropertyAssignment(property) &&
+          !ts.isMethodDeclaration(property) && !ts.isGetAccessorDeclaration(property) &&
+          !ts.isSetAccessorDeclaration(property)) continue;
+      const name = staticPropertyName(property.name);
+      if (name !== null) names.add(name);
+    }
+  }
+
+  function addAssignedExport(expression: ts.Expression): void {
+    if (ts.isPropertyAccessExpression(expression) && isExportObject(expression.expression)) {
+      names.add(expression.name.text);
+    } else if (ts.isElementAccessExpression(expression) && expression.argumentExpression &&
+               isExportObject(expression.expression) && ts.isStringLiteralLike(expression.argumentExpression)) {
+      names.add(expression.argumentExpression.text);
+    }
+  }
+
+  function visit(node: ts.Node): void {
+    if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.EqualsToken) {
+      if (isModuleExports(node.left)) addObjectProperties(node.right);
+      else addAssignedExport(node.left);
+    } else if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression) &&
+               ts.isIdentifier(node.expression.expression) && node.expression.expression.text === "Object" &&
+               node.expression.name.text === "defineProperty") {
+      const [target, name] = node.arguments;
+      if (target && name && isExportObject(target) && ts.isStringLiteralLike(name)) names.add(name.text);
+    }
+    ts.forEachChild(node, visit);
+  }
+
+  visit(source);
+  return [...names].sort();
 }
 
 // True when target is strictly inside root; root itself doesn't count.
@@ -218,7 +281,7 @@ async function resolveImport(
   };
 }
 
-// Entry point: walks the repo, parses each source file, resolves each import,
+// Entry point: walks the repo, parses each source file, resolves each reference,
 // and returns files, edges, routes and a coverage report. A file that can't be
 // read or has syntax errors is skipped and counted, never partly included.
 // Edges are deduplicated per (from, to, kind). Adapters are tried in the order
@@ -269,6 +332,7 @@ export async function parseRepository(
           folder: toRepoPath(path.dirname(relativePath)) || ".",
           moduleId,
           kind: adapter.roleOf({ path: relativePath, source }),
+          commonjsExports: collectCommonJsExports(source),
           lineCount: lineCount(contents),
           sha256: createHash("sha256").update(bytes).digest("hex"),
           fanIn: 0,

@@ -3,9 +3,9 @@ import { isConventionEntryPoint } from "../parser/adapters/entry-points.mts";
 import { findImportCycles, type GraphIndex, type ImportCycle } from "./graph.ts";
 
 export const INSIGHT_SENTENCES = {
-  unimported: "No file in this repository imports this file.",
-  highFanIn: "An unusually large number of files import this file.",
-  cycles: "These files form an import cycle.",
+  unimported: "No file in this repository depends on this file.",
+  highFanIn: "An unusually large number of files depend on this file.",
+  cycles: "These files form a dependency cycle.",
   oversized: "This file exceeds the line-count threshold.",
 } as const;
 

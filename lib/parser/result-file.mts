@@ -21,9 +21,9 @@ function isArrayOf<T>(value: unknown, predicate: (entry: unknown) => entry is T)
   return Array.isArray(value) && value.every(predicate);
 }
 
-// One of the three import kinds the parser records.
+// One of the module dependency kinds the parser records.
 function isImportKind(value: unknown): boolean {
-  return value === "import" || value === "re-export" || value === "dynamic-import";
+  return value === "import" || value === "re-export" || value === "dynamic-import" || value === "require";
 }
 
 // One import record. A resolved import must name its target file; every other
@@ -47,6 +47,7 @@ export function isParserResult(value: unknown): value is ParserResult {
   if (!isArrayOf(value.files, (file): file is ParserResult["files"][number] =>
     isRecord(file) && isString(file.path) && isString(file.folder) &&
     isString(file.moduleId) && isString(file.kind) && isString(file.sha256) &&
+    (file.commonjsExports === undefined || isArrayOf(file.commonjsExports, isString)) &&
     /^[a-f0-9]{64}$/.test(file.sha256) && isNonnegativeInteger(file.lineCount) &&
     isNonnegativeInteger(file.fanIn) && isNonnegativeInteger(file.fanOut))) return false;
 
