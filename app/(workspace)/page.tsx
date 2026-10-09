@@ -6,7 +6,7 @@ import { createServerSupabaseClient } from "@/lib/supabase";
 export const maxDuration = 900;
 
 export default async function WorkspacePage() {
-  const { orgId, orgSlug } = await auth();
+  const { orgId, orgSlug, orgRole } = await auth();
   const supabase = createServerSupabaseClient();
   const { data, error } = await supabase.from("analyses")
     .select("id,name,status,stage,stage_message,stage_started_at,created_at,finished_at")
@@ -18,6 +18,6 @@ export default async function WorkspacePage() {
     </div>
     <AnalysisForm />
     {error ? <p className="mt-5 border border-border bg-surface p-4 text-xs" role="alert">Could not load analyses: {error.message}</p> :
-      <AnalysisList initial={data ?? []} orgId={orgId ?? ""} />}
+      <AnalysisList initial={data ?? []} orgId={orgId ?? ""} canDelete={orgRole === "org:admin"} />}
   </section>;
 }

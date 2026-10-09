@@ -41,7 +41,11 @@ test("category counts reconcile across every folded and open panel", () => {
   const folding = foldDirectories(files);
   const view = buildCanvasView(files, [], folding, new Set(folding.groups.map((group) => group.folder)));
   const categories = categoriesOf(files, "react");
-  assert.deepEqual(categories.map((category) => category.label), ["Components", "Hooks", "Tests", "Type declarations", "Config", "Other modules"]);
+  assert.deepEqual(categories.map((category) => category.label), [
+    "Route files", "Controllers", "Gateways", "Resolvers", "Services", "Repositories", "Modules", "Utilities",
+    "DTOs", "Guards", "Interceptors", "Pipes", "Filters", "Middleware", "Decorators", "Strategies",
+    "Models", "Entities", "Schemas", "Components", "Hooks", "Tests", "Type declarations", "Config", "Other files",
+  ]);
   for (const category of categories) {
     const filter = categoryFilterFor(files, folding, category.role)!;
     assert.equal([...filter.counts.values()].reduce((sum, count) => sum + count, 0), category.count);

@@ -6,10 +6,22 @@
 export interface RoleCategory {
   role: string;
   label: string;
+  section: RoleSection;
   // Index into the six --kind-N hues. Only the roles someone scans for get one;
   // a seventh colour would stop meaning anything.
   hue?: 1 | 2 | 3 | 4 | 5 | 6;
 }
+
+export const ROLE_SECTIONS = {
+  routes: "Routes",
+  controllers: "Controllers",
+  application: "Services and modules",
+  models: "Models",
+  shared: "Components and hooks",
+  repository: "Other files",
+} as const;
+
+export type RoleSection = keyof typeof ROLE_SECTIONS;
 
 export interface Taxonomy {
   // Shown in the interface; null when no adapter matched.
@@ -20,44 +32,17 @@ export interface Taxonomy {
 // Name the parser records when no framework adapter matched.
 export const GENERIC_ADAPTER = "fallback";
 
-// Every repository ends with these, framework or not: plumbing last.
-export const GENERIC_ROLES = {
-  test: "test",
-  typeDeclaration: "type-declaration",
-  config: "config",
-  other: "other",
-} as const;
-
-const GENERIC_CATEGORIES: readonly RoleCategory[] = [
-  { role: GENERIC_ROLES.test, label: "Tests" },
-  { role: GENERIC_ROLES.typeDeclaration, label: "Type declarations" },
-  { role: GENERIC_ROLES.config, label: "Config" },
-  { role: GENERIC_ROLES.other, label: "Other modules" },
-];
-
-export const REACT_ROLES = {
-  component: "component",
-  hook: "hook",
-} as const;
-
-export const NEXTJS_ROLES = {
-  page: "page",
-  apiRoute: "api-route",
-  serverAction: "server-action",
-  layout: "layout",
-  routeUi: "route-ui",
-  metadata: "metadata",
-  middleware: "middleware",
-  ...REACT_ROLES,
-} as const;
-
-export const NESTJS_ROLES = {
+// Roles shared by common application folder and file-name conventions.
+export const APPLICATION_ROLES = {
+  route: "route",
   controller: "controller",
   gateway: "gateway",
   resolver: "resolver",
   service: "service",
   repository: "repository",
   module: "module",
+  utility: "utility",
+  model: "model",
   entity: "entity",
   schema: "schema",
   dto: "dto",
@@ -68,6 +53,95 @@ export const NESTJS_ROLES = {
   middleware: "middleware",
   decorator: "decorator",
   strategy: "strategy",
+  component: "component",
+  hook: "hook",
+} as const;
+
+// Shared application and repository role ids used by every adapter.
+export const GENERIC_ROLES = {
+  ...APPLICATION_ROLES,
+  test: "test",
+  typeDeclaration: "type-declaration",
+  config: "config",
+  other: "other",
+} as const;
+
+const GENERIC_CATEGORIES: readonly RoleCategory[] = [
+  { role: GENERIC_ROLES.test, label: "Tests", section: "repository" },
+  { role: GENERIC_ROLES.typeDeclaration, label: "Type declarations", section: "repository" },
+  { role: GENERIC_ROLES.config, label: "Config", section: "repository" },
+  { role: GENERIC_ROLES.other, label: "Other files", section: "repository" },
+];
+
+const ROUTE_CATEGORIES: readonly RoleCategory[] = [
+  { role: APPLICATION_ROLES.route, label: "Route files", section: "routes" },
+];
+
+const CONTROLLER_CATEGORIES: readonly RoleCategory[] = [
+  { role: APPLICATION_ROLES.controller, label: "Controllers", section: "controllers", hue: 1 },
+  { role: APPLICATION_ROLES.gateway, label: "Gateways", section: "controllers" },
+  { role: APPLICATION_ROLES.resolver, label: "Resolvers", section: "controllers" },
+];
+
+const APPLICATION_CATEGORIES: readonly RoleCategory[] = [
+  { role: APPLICATION_ROLES.service, label: "Services", section: "application", hue: 2 },
+  { role: APPLICATION_ROLES.repository, label: "Repositories", section: "application" },
+  { role: APPLICATION_ROLES.module, label: "Modules", section: "application", hue: 3 },
+  { role: APPLICATION_ROLES.utility, label: "Utilities", section: "application" },
+  { role: APPLICATION_ROLES.dto, label: "DTOs", section: "application", hue: 5 },
+  { role: APPLICATION_ROLES.guard, label: "Guards", section: "application", hue: 6 },
+  { role: APPLICATION_ROLES.interceptor, label: "Interceptors", section: "application" },
+  { role: APPLICATION_ROLES.pipe, label: "Pipes", section: "application" },
+  { role: APPLICATION_ROLES.filter, label: "Filters", section: "application" },
+  { role: APPLICATION_ROLES.middleware, label: "Middleware", section: "application" },
+  { role: APPLICATION_ROLES.decorator, label: "Decorators", section: "application" },
+  { role: APPLICATION_ROLES.strategy, label: "Strategies", section: "application" },
+];
+
+const MODEL_CATEGORIES: readonly RoleCategory[] = [
+  { role: APPLICATION_ROLES.model, label: "Models", section: "models" },
+  { role: APPLICATION_ROLES.entity, label: "Entities", section: "models", hue: 4 },
+  { role: APPLICATION_ROLES.schema, label: "Schemas", section: "models" },
+];
+
+const SHARED_CATEGORIES: readonly RoleCategory[] = [
+  { role: APPLICATION_ROLES.component, label: "Components", section: "shared", hue: 5 },
+  { role: APPLICATION_ROLES.hook, label: "Hooks", section: "shared", hue: 6 },
+];
+
+export const REACT_ROLES = {
+  component: APPLICATION_ROLES.component,
+  hook: APPLICATION_ROLES.hook,
+} as const;
+
+export const NEXTJS_ROLES = {
+  page: "page",
+  apiRoute: "api-route",
+  serverAction: "server-action",
+  layout: "layout",
+  routeUi: "route-ui",
+  metadata: "metadata",
+  middleware: APPLICATION_ROLES.middleware,
+  ...REACT_ROLES,
+} as const;
+
+export const NESTJS_ROLES = {
+  controller: APPLICATION_ROLES.controller,
+  gateway: APPLICATION_ROLES.gateway,
+  resolver: APPLICATION_ROLES.resolver,
+  service: APPLICATION_ROLES.service,
+  repository: APPLICATION_ROLES.repository,
+  module: APPLICATION_ROLES.module,
+  entity: APPLICATION_ROLES.entity,
+  schema: APPLICATION_ROLES.schema,
+  dto: APPLICATION_ROLES.dto,
+  guard: APPLICATION_ROLES.guard,
+  interceptor: APPLICATION_ROLES.interceptor,
+  pipe: APPLICATION_ROLES.pipe,
+  filter: APPLICATION_ROLES.filter,
+  middleware: APPLICATION_ROLES.middleware,
+  decorator: APPLICATION_ROLES.decorator,
+  strategy: APPLICATION_ROLES.strategy,
 } as const;
 
 // Reading order: what a request reaches first, then the layers behind it,
@@ -76,51 +150,55 @@ const TAXONOMIES: Record<string, Taxonomy> = {
   nextjs: {
     framework: "Next.js",
     categories: [
-      { role: NEXTJS_ROLES.page, label: "Page routes", hue: 1 },
-      { role: NEXTJS_ROLES.apiRoute, label: "API endpoints", hue: 2 },
-      { role: NEXTJS_ROLES.serverAction, label: "Server actions", hue: 3 },
-      { role: NEXTJS_ROLES.layout, label: "Layouts", hue: 4 },
-      { role: NEXTJS_ROLES.routeUi, label: "Loading and error UI" },
-      { role: NEXTJS_ROLES.metadata, label: "Metadata files" },
-      { role: NEXTJS_ROLES.middleware, label: "Middleware" },
-      { role: NEXTJS_ROLES.component, label: "Components", hue: 5 },
-      { role: NEXTJS_ROLES.hook, label: "Hooks", hue: 6 },
+      { role: NEXTJS_ROLES.page, label: "Page routes", section: "routes", hue: 1 },
+      { role: NEXTJS_ROLES.apiRoute, label: "API endpoints", section: "routes", hue: 2 },
+      { role: NEXTJS_ROLES.serverAction, label: "Server actions", section: "routes", hue: 3 },
+      ...ROUTE_CATEGORIES,
+      ...CONTROLLER_CATEGORIES,
+      { role: NEXTJS_ROLES.layout, label: "Layouts", section: "application", hue: 4 },
+      { role: NEXTJS_ROLES.routeUi, label: "Loading and error UI", section: "application" },
+      { role: NEXTJS_ROLES.metadata, label: "Metadata files", section: "application" },
+      ...APPLICATION_CATEGORIES,
+      ...MODEL_CATEGORIES,
+      ...SHARED_CATEGORIES,
       ...GENERIC_CATEGORIES,
     ],
   },
   nestjs: {
     framework: "NestJS",
     categories: [
-      { role: NESTJS_ROLES.controller, label: "Controllers", hue: 1 },
-      { role: NESTJS_ROLES.gateway, label: "Gateways" },
-      { role: NESTJS_ROLES.resolver, label: "Resolvers" },
-      { role: NESTJS_ROLES.service, label: "Services", hue: 2 },
-      { role: NESTJS_ROLES.repository, label: "Repositories" },
-      { role: NESTJS_ROLES.module, label: "Modules", hue: 3 },
-      { role: NESTJS_ROLES.entity, label: "Entities", hue: 4 },
-      { role: NESTJS_ROLES.schema, label: "Schemas" },
-      { role: NESTJS_ROLES.dto, label: "DTOs", hue: 5 },
-      { role: NESTJS_ROLES.guard, label: "Guards", hue: 6 },
-      { role: NESTJS_ROLES.interceptor, label: "Interceptors" },
-      { role: NESTJS_ROLES.pipe, label: "Pipes" },
-      { role: NESTJS_ROLES.filter, label: "Filters" },
-      { role: NESTJS_ROLES.middleware, label: "Middleware" },
-      { role: NESTJS_ROLES.decorator, label: "Decorators" },
-      { role: NESTJS_ROLES.strategy, label: "Strategies" },
+      ...ROUTE_CATEGORIES,
+      ...CONTROLLER_CATEGORIES,
+      ...APPLICATION_CATEGORIES,
+      ...MODEL_CATEGORIES,
+      ...SHARED_CATEGORIES,
       ...GENERIC_CATEGORIES,
     ],
   },
   react: {
     framework: "React",
     categories: [
-      { role: REACT_ROLES.component, label: "Components", hue: 1 },
-      { role: REACT_ROLES.hook, label: "Hooks", hue: 2 },
+      ...ROUTE_CATEGORIES,
+      ...CONTROLLER_CATEGORIES,
+      ...APPLICATION_CATEGORIES,
+      ...MODEL_CATEGORIES,
+      ...SHARED_CATEGORIES,
       ...GENERIC_CATEGORIES,
     ],
   },
 };
 
-const GENERIC_TAXONOMY: Taxonomy = { framework: null, categories: GENERIC_CATEGORIES };
+const GENERIC_TAXONOMY: Taxonomy = {
+  framework: null,
+  categories: [
+    ...ROUTE_CATEGORIES,
+    ...CONTROLLER_CATEGORIES,
+    ...APPLICATION_CATEGORIES,
+    ...MODEL_CATEGORIES,
+    ...SHARED_CATEGORIES,
+    ...GENERIC_CATEGORIES,
+  ],
+};
 
 export function taxonomyFor(adapter: string): Taxonomy {
   return TAXONOMIES[adapter] ?? GENERIC_TAXONOMY;

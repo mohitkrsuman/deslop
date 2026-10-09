@@ -75,3 +75,48 @@ export async function rerunAnalysis(id: string): Promise<void> {
   after(() => runAnalysis(id, orgId, project.repository_url));
   redirect(`/analysis/${id}`);
 }
+
+export type DeleteAnalysisState = { error?: string; projectName?: string };
+
+export async function deleteAnalysis(
+  id: string,
+  _previous: DeleteAnalysisState,
+  form: FormData,
+): Promise<DeleteAnalysisState> {
+  const { orgId, orgRole, userId } = await auth();
+  if (!orgId || !userId) return { error: "Choose an organization first." };
+  if (orgRole !== "org:admin") return { error: "Only organization admins can delete analyses." };
+
+  try {
+    const client = createWorkerClient();
+    const { data: analysis, error: lookupError } = await client.from("analyses")
+      .select("project_id")
+      .eq("id", id)
+      .eq("organization_id", orgId)
+      .maybeSingle();
+    if (lookupError || !analysis) return { error: "This analysis was not found in your organization." };
+
+    const { data: project, error: projectError } = await client.from("projects")
+      .select("name")
+      .eq("id", analysis.project_id)
+      .eq("organization_id", orgId)
+      .maybeSingle();
+    if (projectError || !project) return { error: "Could not verify this project's name." };
+    if (String(form.get("project_name") ?? "") !== project.name) {
+      return { error: "The project name did not match.", projectName: project.name };
+    }
+
+    const { data, error } = await client.from("analyses")
+      .delete()
+      .eq("id", id)
+      .eq("organization_id", orgId)
+      .select("id")
+      .maybeSingle();
+    if (error) return { error: "Could not delete this analysis. Please try again." };
+    if (!data) return { error: "This analysis was not found in your organization." };
+  } catch {
+    return { error: "Could not delete this analysis. Please try again." };
+  }
+
+  redirect("/");
+}

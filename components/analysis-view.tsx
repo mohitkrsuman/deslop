@@ -40,7 +40,7 @@ export function AnalysisView({
   const index = useMemo(() => buildDetailIndex(files, edges), [files, edges]);
   const insights = useMemo(() => buildInsights(files, index), [files, index]);
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
-  const categoryFilter = useMemo(() => categoryFilterFor(files, folding, activeCategory), [files, folding, activeCategory]);
+  const categoryFilter = useMemo(() => categoryFilterFor(files, folding, activeCategory, adapter), [files, folding, activeCategory, adapter]);
   const [openFolders, setOpenFolders] = useState<ReadonlySet<string>>(() => new Set());
   const [selection, setSelection] = useState<Selection>(null);
   const [hovered, setHovered] = useState<HoverTarget>(null);

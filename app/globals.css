@@ -86,12 +86,16 @@ body {
 }
 
 .canvas-file-scroll,
-.analysis-side-scroll {
+.analysis-side-scroll,
+.analysis-list-scroll,
+.analysis-dialog-scroll {
   scrollbar-width: none;
   -ms-overflow-style: none;
 }
 
 .canvas-file-scroll::-webkit-scrollbar,
-.analysis-side-scroll::-webkit-scrollbar {
+.analysis-side-scroll::-webkit-scrollbar,
+.analysis-list-scroll::-webkit-scrollbar,
+.analysis-dialog-scroll::-webkit-scrollbar {
   display: none;
 }

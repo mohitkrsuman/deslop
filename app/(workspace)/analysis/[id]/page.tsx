@@ -1,7 +1,9 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { auth } from "@clerk/nextjs/server";
 import { rerunAnalysis } from "@/app/actions/analysis";
 import { AnalysisView } from "@/components/analysis-view";
+import { AnalysisSettingsButton } from "@/components/analysis-settings-button";
 import { ProgressStream } from "@/components/progress-stream";
 import { createServerSupabaseClient } from "@/lib/supabase";
 import type { RouteRow } from "@/components/canvas/route-table";
@@ -12,6 +14,7 @@ export const maxDuration = 900;
 
 export default async function AnalysisPage({ params }: PageProps<"/analysis/[id]">) {
   const { id } = await params;
+  const { orgRole } = await auth();
   const client = createServerSupabaseClient();
   const { data: analysis, error } = await client.from("analyses")
     .select("id,name,status,stage,stage_message,stage_started_at,error_message,commit_sha,adapter,coverage,coverage_percent,import_count")
@@ -24,7 +27,10 @@ export default async function AnalysisPage({ params }: PageProps<"/analysis/[id]
     <div className="mb-6 flex items-center justify-between gap-4">
       <div><Link href="/" className="text-xs text-muted hover:underline">← All analyses</Link>
         <h1 className="mt-2 text-xl font-semibold">{analysis.name}</h1></div>
-      <form action={rerun}><button className="border border-border px-3 py-2 text-xs hover:bg-surface">Run again</button></form>
+      <div className="flex items-center gap-2">
+        <AnalysisSettingsButton analysisId={id} projectName={analysis.name} canDelete={orgRole === "org:admin"} />
+        <form action={rerun}><button className="border border-border px-3 py-2 text-xs hover:bg-surface">Run again</button></form>
+      </div>
     </div>
     <ProgressStream id={id} initial={{ stage: analysis.stage, message: analysis.stage_message,
       stageStartedAt: analysis.stage_started_at, status: analysis.status }} />
@@ -89,7 +95,10 @@ export default async function AnalysisPage({ params }: PageProps<"/analysis/[id]
         <span className="font-medium">{analysis.name}</span>
         {analysis.commit_sha && <span className="font-mono text-muted" title="Analyzed commit">{analysis.commit_sha.slice(0, 12)}</span>}
       </div>
-      <form action={rerun}><button className="border border-border px-3 py-1.5 hover:bg-background">Run again</button></form>
+      <div className="flex items-center gap-2">
+        <AnalysisSettingsButton analysisId={id} projectName={analysis.name} canDelete={orgRole === "org:admin"} />
+        <form action={rerun}><button className="border border-border px-3 py-1.5 hover:bg-background">Run again</button></form>
+      </div>
     </div>
     <div className="min-h-0 flex-1">
       <AnalysisView name={analysis.name} adapter={adapter}

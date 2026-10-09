@@ -1,6 +1,9 @@
 import type { FileNode } from "../parser/types.mts";
 import { taxonomyFor } from "../taxonomy.mts";
+import type { RoleSection } from "../taxonomy.mts";
 import type { Folding } from "./fold.ts";
+
+export const CATEGORY_SECTION_PREFIX = "section:";
 
 export interface CategoryFilter {
   role: string;
@@ -9,9 +12,14 @@ export interface CategoryFilter {
 }
 
 // Counts cover every member of a folded group, including offscreen panel rows.
-export function categoryFilterFor(files: FileNode[], folding: Folding, role: string | null): CategoryFilter | null {
+export function categoryFilterFor(files: FileNode[], folding: Folding, role: string | null, adapter?: string): CategoryFilter | null {
   if (role === null) return null;
-  const paths = new Set(files.filter((file) => file.kind === role).map((file) => file.path));
+  const roles = role.startsWith(CATEGORY_SECTION_PREFIX)
+    ? new Set(taxonomyFor(adapter ?? "").categories
+      .filter((category) => category.section === role.slice(CATEGORY_SECTION_PREFIX.length))
+      .map((category) => category.role))
+    : new Set([role]);
+  const paths = new Set(files.filter((file) => roles.has(file.kind)).map((file) => file.path));
   const counts = new Map(folding.groups.map((group) => [group.folder, group.files.filter((path) => paths.has(path)).length]));
   return { role, paths, counts };
 }
@@ -19,6 +27,7 @@ export function categoryFilterFor(files: FileNode[], folding: Folding, role: str
 export interface Category {
   role: string;
   label: string;
+  section: RoleSection;
   count: number;
   // CSS colour for this role, or null: only the roles worth scanning for get one.
   color: string | null;
@@ -39,6 +48,7 @@ export function categoriesOf(files: FileNode[], adapter: string): Category[] {
   return taxonomyFor(adapter).categories.map((category) => ({
     role: category.role,
     label: category.label,
+    section: category.section,
     count: counts.get(category.role) ?? 0,
     color: category.hue ? `var(--kind-${category.hue})` : null,
   }));
