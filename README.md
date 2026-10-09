@@ -2,6 +2,12 @@
 
 DeSlop turns a public JavaScript or TypeScript GitHub repository into an interactive map of its real file dependencies. It is designed to help a developer understand an unfamiliar codebase by showing how files connect, what a file depends on, and what may be affected by changing it.
 
+
+
+https://github.com/user-attachments/assets/36c0dfda-5a50-4a30-91a9-e71deab6d1fa
+
+
+
 <!-- Add a project screenshot here when one is ready. -->
 
 ## Features
