@@ -1,6 +1,12 @@
 export type Database = {
   public: {
     Tables: {
+      projects: {
+        Row: {
+          id: string; organization_id: string; name: string; repository_url: string; created_at: string;
+        };
+        Insert: never; Update: never; Relationships: [];
+      };
       analyses: {
         Row: {
           id: string;
@@ -8,7 +14,7 @@ export type Database = {
           status: "queued" | "analyzing" | "complete" | "failed";
           created_at: string;
           finished_at: string | null;
-          stage: "queued" | "fetching" | "selecting" | "parsing" | "storing" | "complete" | "failed";
+          stage: "queued" | "fetching" | "selecting" | "parsing" | "storing" | "labelling" | "complete" | "failed";
           stage_message: string;
           stage_started_at: string;
           error_message: string | null;
@@ -18,6 +24,7 @@ export type Database = {
           coverage: unknown;
           coverage_percent: number | null;
           import_count: number | null;
+          labelling_error: string | null;
           organization_id: string;
           project_id: string;
         };
@@ -31,6 +38,18 @@ export type Database = {
           folder: string | null; module_id: string | null; kind: string | null;
           line_count: number | null; sha256: string | null;
           fan_in: number | null; fan_out: number | null;
+        };
+        Insert: never; Update: never; Relationships: [];
+      };
+      file_roles: {
+        Row: {
+          id: string; analysis_id: string; organization_id: string; file_id: string; role: string; model: string;
+        };
+        Insert: never; Update: never; Relationships: [];
+      };
+      model_cache: {
+        Row: {
+          organization_id: string; cache_key: string; task: string; model: string; output: unknown; created_at: string;
         };
         Insert: never; Update: never; Relationships: [];
       };

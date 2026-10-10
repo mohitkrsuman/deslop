@@ -5,10 +5,10 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
 
-const stages = ["fetching", "selecting", "parsing", "storing", "complete"];
+const stages = ["fetching", "selecting", "parsing", "storing", "labelling", "complete"];
 const labels: Record<string, string> = {
   fetching: "Fetch archive", selecting: "Select files", parsing: "Parse dependencies",
-  storing: "Store map", complete: "Map ready",
+  storing: "Store map", labelling: "Label unidentified files", complete: "Map ready",
 };
 
 export function ProgressStream({ id, initial }: {

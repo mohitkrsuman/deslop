@@ -4,7 +4,8 @@ import { auth } from "@clerk/nextjs/server";
 import { after } from "next/server";
 import { redirect } from "next/navigation";
 import { parseGithubUrl } from "@/lib/github-archive";
-import { createWorkerClient, runAnalysis } from "@/lib/pipeline";
+import { runAnalysis } from "@/lib/pipeline";
+import { createWorkerClient } from "@/lib/supabase-worker";
 
 export type SubmitAnalysisState = { error?: string };
 

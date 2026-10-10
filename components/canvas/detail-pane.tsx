@@ -1,6 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useState } from "react";
+import { checkFreshness, requestFileExplanation, requestFolderExplanation, type Freshness } from "@/app/actions/explain";
+import { ExplanationPanel, type ExplanationEntry } from "@/components/canvas/explanation-panel";
 import { GraphWalk } from "@/components/canvas/graph-walk";
 import { PathList } from "@/components/canvas/path-list";
 import { extensionOf, type Category } from "@/lib/canvas/categories";
@@ -9,9 +11,16 @@ import type { DetailIndex } from "@/lib/canvas/details";
 import type { Folding, FoldedGroup } from "@/lib/canvas/fold";
 import { type HoverTarget, type Selection } from "@/lib/canvas/selection";
 import { nodeIdFor } from "@/lib/canvas/view";
+import type { TracingStatus } from "@/lib/ai/client";
 import type { FileNode } from "@/lib/parser/types.mts";
 
 interface DetailPaneProps {
+  analysisId: string;
+  commitSha: string | null;
+  tracing: TracingStatus;
+  rerun: () => Promise<void>;
+  modelRoles: ReadonlySet<string>;
+  labellingError: string | null;
   name: string;
   adapter: string;
   importCount: number;
@@ -23,6 +32,7 @@ interface DetailPaneProps {
   selection: Selection;
   hovered: HoverTarget;
   onSelectFile: (path: string) => void;
+  onSelectFolder: (folder: string) => void;
   onHoverChange: (target: HoverTarget) => void;
 }
 
@@ -45,7 +55,7 @@ function SectionTitle({ title, count }: { title: string; count?: number }) {
 }
 
 function RepositorySummary(props: DetailPaneProps) {
-  const { name, adapter, importCount, routeCount, files, index, folding, hovered, onSelectFile, onHoverChange } = props;
+  const { name, adapter, importCount, routeCount, files, index, folding, hovered, labellingError, onSelectFile, onHoverChange } = props;
   const framework = taxonomyFor(adapter).framework ?? "Not detected";
   return (
     <div className="min-w-0">
@@ -60,6 +70,7 @@ function RepositorySummary(props: DetailPaneProps) {
         <Metric label="Routes" value={routeCount} />
         <Metric label="Unidentified" value={index.unidentifiedCount} />
       </dl>
+      {labellingError && <p className="px-4 pb-4 text-[11px] text-muted">Labelling unidentified files did not finish: {labellingError}</p>}
       <section className="border-t border-border px-4 py-4">
         <SectionTitle title="Most depended on" count={Math.min(index.mostDependedOn.length, 10)} />
         <p className="mt-1 text-[11px] text-muted">Files with the most direct dependents.</p>
@@ -91,8 +102,9 @@ function RepositorySummary(props: DetailPaneProps) {
 }
 
 function FileStructure({ file, props }: { file: FileNode; props: DetailPaneProps }) {
-  const { categories, index, folding, hovered, onSelectFile, onHoverChange } = props;
+  const { categories, index, folding, hovered, modelRoles, onSelectFile, onHoverChange } = props;
   const role = file.kind === GENERIC_ROLES.other ? "Unidentified" : categories.find((category) => category.role === file.kind)?.label ?? "Unidentified";
+  const labelledByModel = modelRoles.has(file.path);
   const dependencies = index.dependencies.get(file.path) ?? [];
   const dependents = index.dependents.get(file.path) ?? [];
   return (
@@ -103,7 +115,9 @@ function FileStructure({ file, props }: { file: FileNode; props: DetailPaneProps
         <Metric label="Depends on" value={dependencies.length} />
         <Metric label="Depended on by" value={dependents.length} />
       </dl>
-      <p className="px-4 pb-4 text-[11px] text-muted">Role: {role}</p>
+      <p className="px-4 pb-4 text-[11px] text-muted">
+        Role: {role}{labelledByModel && " · labelled by model, no adapter matched"}
+      </p>
       <GraphWalk key={file.path} path={file.path} graph={index} folding={folding} hovered={hovered} onSelectFile={onSelectFile} onHoverChange={onHoverChange} />
       <section className="border-t border-border px-4 py-4">
         <SectionTitle title="Depends on" count={dependencies.length} />
@@ -154,9 +168,28 @@ function FolderStructure({ group, props }: { group: FoldedGroup; props: DetailPa
   );
 }
 
+// Explanations are kept per file and folder for the life of the page, so
+// coming back to one shows it again without asking.
+function useExplanations(analysisId: string) {
+  const [entries, setEntries] = useState<ReadonlyMap<string, ExplanationEntry>>(() => new Map());
+  const [freshness, setFreshness] = useState<ReadonlyMap<string, Freshness>>(() => new Map());
+  const explain = useCallback(async (key: string, subject: { kind: "file"; path: string } | { kind: "folder"; folder: string }) => {
+    setEntries((current) => new Map(current).set(key, { status: "loading" }));
+    const result = subject.kind === "file"
+      ? await requestFileExplanation(analysisId, subject.path)
+      : await requestFolderExplanation(analysisId, subject.folder);
+    setEntries((current) => new Map(current).set(key, { status: "done", result }));
+    if (!result.ok) return;
+    const fresh = await checkFreshness(analysisId, subject.kind === "file" ? subject.path : null);
+    setFreshness((current) => new Map(current).set(key, fresh));
+  }, [analysisId]);
+  return { entries, freshness, explain };
+}
+
 export function DetailPane(props: DetailPaneProps) {
   const [tab, setTab] = useState<"structure" | "explanation">("structure");
-  const { selection, index, folding, hovered, onSelectFile, onHoverChange } = props;
+  const { selection, index, folding, hovered, onSelectFile, onSelectFolder, onHoverChange } = props;
+  const explanations = useExplanations(props.analysisId);
   const file = selection?.kind === "row" ? index.fileByPath.get(selection.path) : undefined;
   const group = selection?.kind === "node"
     ? folding.groups.find((item) => selection.id === nodeIdFor(item.folder, false) || selection.id === nodeIdFor(item.folder, true))
@@ -165,6 +198,7 @@ export function DetailPane(props: DetailPaneProps) {
   if (!file && !group) return <RepositorySummary {...props} />;
 
   const title = file?.path ?? group?.folder ?? "";
+  const explanationKey = file ? `file:${file.path}` : `folder:${group?.folder}`;
   const titleHovered = file
     ? hovered?.kind === "file" && hovered.path === file.path ||
       hovered?.kind === "folder" && folding.groupOf.get(file.path) === hovered.folder
@@ -208,7 +242,18 @@ export function DetailPane(props: DetailPaneProps) {
       </div>
       <div role="tabpanel">
         {tab === "explanation" ? (
-          <p className="px-4 py-6 text-[11px] text-muted">No explanation yet.</p>
+          <ExplanationPanel
+            key={explanationKey}
+            subject={file ? "file" : "folder"}
+            entry={explanations.entries.get(explanationKey)}
+            freshness={explanations.freshness.get(explanationKey)}
+            commitSha={props.commitSha}
+            tracing={props.tracing}
+            rerun={props.rerun}
+            onExplain={() => void explanations.explain(explanationKey,
+              file ? { kind: "file", path: file.path } : { kind: "folder", folder: group?.folder ?? "." })}
+            nav={{ folding, index, hovered, onSelectFile, onSelectFolder, onHoverChange }}
+          />
         ) : file ? <FileStructure file={file} props={props} /> : group ? <FolderStructure group={group} props={props} /> : null}
       </div>
     </div>
