@@ -56,6 +56,30 @@ function messagesOf(update: unknown): Json[] {
   return list.filter(isObject);
 }
 
+// The files a graph tool's result names, read from the tool's own output (the
+// app's graph functions answered it), never from the model's prose. A capped
+// result lights only what was returned.
+function reachedBy(tool: unknown, content: string): { path: string; hops: number }[] | undefined {
+  if (tool !== "get_neighbours" && tool !== "walk_graph") return undefined;
+  let result: unknown;
+  try {
+    result = JSON.parse(content);
+  } catch {
+    return undefined;
+  }
+  if (!isObject(result) || typeof result.path !== "string" || result.found === false) return undefined;
+  const reached = [{ path: result.path, hops: 0 }];
+  const paths = (list: unknown) => Array.isArray(list) ? list.filter((item): item is string => typeof item === "string") : [];
+  if (tool === "get_neighbours") {
+    for (const path of [...paths(result.dependsOn), ...paths(result.dependedOnBy)]) reached.push({ path, hops: 1 });
+  } else if (Array.isArray(result.items)) {
+    for (const item of result.items) {
+      if (isObject(item) && typeof item.path === "string" && typeof item.depth === "number") reached.push({ path: item.path, hops: item.depth });
+    }
+  }
+  return reached;
+}
+
 export async function* streamAnswer(client: Client, threadId: string, content: string, grant: string, signal: AbortSignal): AsyncGenerator<AskEvent> {
   const stream = client.runs.stream(threadId, ASSISTANT_ID, {
     input: { messages: [{ role: "user", content }] },
@@ -83,7 +107,9 @@ export async function* streamAnswer(client: Client, threadId: string, content: s
             yield { type: "tool", id: call.id, name: call.name, args: isObject(call.args) ? call.args : {} };
           }
         } else if (message.type === "tool" && typeof message.tool_call_id === "string") {
-          yield { type: "tool_done", id: message.tool_call_id, ok: message.status !== "error" };
+          const ok = message.status !== "error";
+          const reached = ok ? reachedBy(message.name, textOf(message.content)) : undefined;
+          yield { type: "tool_done", id: message.tool_call_id, ok, ...(reached ? { reached } : {}) };
         }
       }
     } else if (event === "error") {

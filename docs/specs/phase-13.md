@@ -78,3 +78,14 @@ OpenAI, without anything else about the product changing.
 - Every model call the agent and its subagent make goes through that choice.
   The agent's built-in default model holds no real key, so a call that skips
   the choice is rejected rather than billed to the app.
+
+## An answer on the map
+
+- A finished answer offers **Show on map** when its graph tools returned files.
+  Only files a tool returned light up — never paths the model merely wrote —
+  and a line stays lit only where the parser recorded an import between two of
+  them. Everything else dims, nothing is removed.
+- It starts at the files the tools began from. **Next hop** lights one more
+  hop each click, **All** lights everything, **Clear** puts the map back.
+  Nothing moves unless clicked.
+- Ask answers use the same three pieces of formatting as explanations.

@@ -2,13 +2,13 @@
 
 import { useCallback, useMemo, useState } from "react";
 import { AnalysisShell } from "@/components/analysis-shell";
-import { AskPanel, type AskSelection } from "@/components/canvas/ask-panel";
+import { AskPanel, type AnswerTrace, type AskSelection } from "@/components/canvas/ask-panel";
 import { CategoryRail } from "@/components/canvas/category-rail";
 import { DependencyMap } from "@/components/canvas/dependency-map";
 import { DetailPane } from "@/components/canvas/detail-pane";
 import { InsightsPanel } from "@/components/canvas/insights-panel";
 import { RouteTable, type RouteRow } from "@/components/canvas/route-table";
-import { categoriesOf, categoryFilterFor } from "@/lib/canvas/categories";
+import { categoriesOf, categoryFilterFor, pathFilterFor } from "@/lib/canvas/categories";
 import { buildDetailIndex } from "@/lib/canvas/details";
 import { foldDirectories } from "@/lib/canvas/fold";
 import { type HoverTarget, type Selection } from "@/lib/canvas/selection";
@@ -53,7 +53,17 @@ export function AnalysisView({
   const index = useMemo(() => buildDetailIndex(files, edges), [files, edges]);
   const insights = useMemo(() => buildInsights(files, index), [files, index]);
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
-  const categoryFilter = useMemo(() => categoryFilterFor(files, folding, activeCategory, adapter), [files, folding, activeCategory, adapter]);
+  // An answer shown on the map, and how many hops of it are lit. Starts at the
+  // files the tools began from; each step is a click.
+  const [trace, setTrace] = useState<{ hops: AnswerTrace; shown: number } | null>(null);
+  const traceMax = useMemo(() => trace ? Math.max(...trace.hops.values()) : 0, [trace]);
+  const traceFilter = useMemo(() => trace
+    ? pathFilterFor(folding, new Set([...trace.hops].filter(([, hops]) => hops <= trace.shown).map(([path]) => path)))
+    : null, [trace, folding]);
+  const categoryFilter = useMemo(
+    () => traceFilter ?? categoryFilterFor(files, folding, activeCategory, adapter),
+    [traceFilter, files, folding, activeCategory, adapter],
+  );
   const [openFolders, setOpenFolders] = useState<ReadonlySet<string>>(() => new Set());
   const [selection, setSelection] = useState<Selection>(null);
   const [hovered, setHovered] = useState<HoverTarget>(null);
@@ -71,6 +81,15 @@ export function AnalysisView({
     setHovered(null);
     setSelection({ kind: "node", id: nodeIdFor(folder, openFolders.has(folder)) });
   }, [openFolders]);
+  const showTrace = useCallback((hops: AnswerTrace) => {
+    const folders = new Set([...hops.keys()].flatMap((path) => folding.groupOf.get(path) ?? []));
+    setOpenFolders((current) => new Set([...current, ...folders]));
+    setActiveCategory(null);
+    setSelection(null);
+    setHovered(null);
+    setMainView("map");
+    setTrace({ hops, shown: 0 });
+  }, [folding]);
   const modelRoleSet = useMemo(() => new Set(modelRoles), [modelRoles]);
   const [paneMode, setPaneMode] = useState<"details" | "ask">("details");
   const askSelection = useMemo<AskSelection>(() => {
@@ -85,6 +104,7 @@ export function AnalysisView({
       rail={
         <>
           <CategoryRail categories={categories} activeCategory={activeCategory} onCategoryChange={(role) => {
+            setTrace(null);
             setActiveCategory(role);
             setSelection(null);
             setHovered(null);
@@ -130,6 +150,21 @@ export function AnalysisView({
           hovered={hovered}
           onHoverChange={setHovered}
         />
+        {trace && (
+          <div role="group" aria-label="Answer on the map" className="absolute right-3 top-3 z-20 flex items-center gap-2 border border-border bg-surface px-2 py-1.5 text-[11px] shadow-sm">
+            <span className="text-muted">
+              Answer · hop <span className="tabular-nums text-foreground">{trace.shown}</span> of <span className="tabular-nums">{traceMax}</span>
+              {" "}· <span className="tabular-nums">{categoryFilter?.paths.size ?? 0}</span> of {trace.hops.size} files
+            </span>
+            <button type="button" disabled={trace.shown === 0} onClick={() => setTrace({ ...trace, shown: trace.shown - 1 })}
+              className="cursor-pointer border border-border px-1.5 hover:bg-background disabled:cursor-default disabled:opacity-50">Back</button>
+            <button type="button" disabled={trace.shown >= traceMax} onClick={() => setTrace({ ...trace, shown: trace.shown + 1 })}
+              className="cursor-pointer border border-border px-1.5 hover:bg-background disabled:cursor-default disabled:opacity-50">Next hop</button>
+            <button type="button" disabled={trace.shown >= traceMax} onClick={() => setTrace({ ...trace, shown: traceMax })}
+              className="cursor-pointer border border-border px-1.5 hover:bg-background disabled:cursor-default disabled:opacity-50">All</button>
+            <button type="button" onClick={() => setTrace(null)} className="cursor-pointer px-1 text-muted hover:text-foreground">Clear</button>
+          </div>
+        )}
         {coveragePercent < 100 && <details className="absolute left-3 top-3 z-20 max-w-sm border border-border bg-surface/95 text-xs shadow-sm">
           <summary className="cursor-pointer px-3 py-2 font-medium">Partial graph · {coveragePercent.toFixed(1)}% coverage</summary>
           <div className="border-t border-border px-3 py-2 text-muted">
@@ -188,6 +223,7 @@ export function AnalysisView({
               analysisId={analysisId}
               selection={askSelection}
               nav={{ folding, index, hovered, onSelectFile: selectFile, onSelectFolder: selectFolder, onHoverChange: setHovered }}
+              onShowTrace={showTrace}
             />
           </div>
         </div>

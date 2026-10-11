@@ -66,6 +66,8 @@ export interface EdgeView {
   imports: number;
   // File roles touching this aggregated edge, for dimming without refolding.
   roles: string[];
+  // The file-to-file imports this line stands for, as "from\0to".
+  pairs: string[];
 }
 
 export interface CanvasView {
@@ -210,6 +212,7 @@ export function buildCanvasView(
       .filter((role): role is string => role !== undefined);
     if (existing) {
       existing.imports += 1;
+      existing.pairs.push(`${edge.from}\0${edge.to}`);
       for (const role of roles) {
         if (!existing.roles.includes(role)) existing.roles.push(role);
       }
@@ -222,6 +225,7 @@ export function buildCanvasView(
         targetHandle: `in:${to.handle}`,
         imports: 1,
         roles: [...new Set(roles)],
+        pairs: [`${edge.from}\0${edge.to}`],
       });
     }
   }

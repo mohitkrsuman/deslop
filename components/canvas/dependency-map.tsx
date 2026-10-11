@@ -395,7 +395,7 @@ function MapCanvas({
   const flowEdges = useMemo<FlowEdge[]>(
     () =>
       view.edges.map((edge) => {
-        const lit = highlight ? highlight.edges.has(edge.id) : !categoryFilter || edge.roles.includes(categoryFilter.role);
+        const lit = highlight ? highlight.edges.has(edge.id) : !categoryFilter || categoryFilter.litEdge(edge);
         // Colour only means direction, so it only appears once there's a
         // selection to be direction relative to.
         const stroke = highlight && lit

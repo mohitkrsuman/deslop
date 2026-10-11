@@ -2,13 +2,19 @@ import type { FileNode } from "../parser/types.mts";
 import { taxonomyFor } from "../taxonomy.mts";
 import type { RoleSection } from "../taxonomy.mts";
 import type { Folding } from "./fold.ts";
+import type { EdgeView } from "./view.ts";
 
 export const CATEGORY_SECTION_PREFIX = "section:";
 
+// Which files stay lit on the map; everything else dims, nothing is removed.
 export interface CategoryFilter {
-  role: string;
   paths: ReadonlySet<string>;
   counts: ReadonlyMap<string, number>;
+  litEdge(edge: EdgeView): boolean;
+}
+
+function countsFor(folding: Folding, paths: ReadonlySet<string>): Map<string, number> {
+  return new Map(folding.groups.map((group) => [group.folder, group.files.filter((path) => paths.has(path)).length]));
 }
 
 // Counts cover every member of a folded group, including offscreen panel rows.
@@ -20,8 +26,20 @@ export function categoryFilterFor(files: FileNode[], folding: Folding, role: str
       .map((category) => category.role))
     : new Set([role]);
   const paths = new Set(files.filter((file) => roles.has(file.kind)).map((file) => file.path));
-  const counts = new Map(folding.groups.map((group) => [group.folder, group.files.filter((path) => paths.has(path)).length]));
-  return { role, paths, counts };
+  return { paths, counts: countsFor(folding, paths), litEdge: (edge) => edge.roles.includes(role) };
+}
+
+// The files an answer's graph tools returned. A line stays lit only where the
+// parser recorded an import between two of those files.
+export function pathFilterFor(folding: Folding, paths: ReadonlySet<string>): CategoryFilter {
+  return {
+    paths,
+    counts: countsFor(folding, paths),
+    litEdge: (edge) => edge.pairs.some((pair) => {
+      const [from, to] = pair.split("\0");
+      return paths.has(from) && paths.has(to);
+    }),
+  };
 }
 
 export interface Category {

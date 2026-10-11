@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import { ExplanationText, type ExplanationNavigation } from "@/components/canvas/explanation-panel";
 import type { AskEvent } from "@/lib/agent/events";
 
@@ -10,12 +10,24 @@ type Part =
   | { kind: "text"; text: string }
   | { kind: "tool"; id: string; name: string; args: Record<string, unknown>; state: "running" | "done" | "failed" };
 
+// Every file this turn's graph tools returned, with the fewest hops any of
+// them put it from its starting file.
+export type AnswerTrace = ReadonlyMap<string, number>;
+
 interface Turn {
   question: string;
   selection: AskSelection;
   parts: Part[];
+  reached: AnswerTrace;
   status: "streaming" | "done" | "error" | "stopped";
   error?: string;
+}
+
+function mergeReached(current: AnswerTrace, reached: { path: string; hops: number }[] | undefined): AnswerTrace {
+  if (!reached || reached.length === 0) return current;
+  const next = new Map(current);
+  for (const { path, hops } of reached) next.set(path, Math.min(hops, next.get(path) ?? hops));
+  return next;
 }
 
 function applyEvent(turn: Turn, event: AskEvent): Turn {
@@ -30,7 +42,11 @@ function applyEvent(turn: Turn, event: AskEvent): Turn {
     case "tool":
       return { ...turn, parts: [...turn.parts, { kind: "tool", id: event.id, name: event.name, args: event.args, state: "running" }] };
     case "tool_done":
-      return { ...turn, parts: turn.parts.map((part) => part.kind === "tool" && part.id === event.id ? { ...part, state: event.ok ? "done" : "failed" } : part) };
+      return {
+        ...turn,
+        reached: mergeReached(turn.reached, event.reached),
+        parts: turn.parts.map((part) => part.kind === "tool" && part.id === event.id ? { ...part, state: event.ok ? "done" : "failed" } : part),
+      };
     case "error":
       return { ...turn, status: "error", error: event.message };
     case "done":
@@ -58,7 +74,30 @@ function ToolCall({ part }: { part: Extract<Part, { kind: "tool" }> }) {
   );
 }
 
-export function AskPanel({ analysisId, selection, nav }: { analysisId: string; selection: AskSelection; nav: ExplanationNavigation }) {
+// Offered once the answer is finished, and only for files on this map.
+function TraceButton({ turn, nav, onShowTrace }: { turn: Turn; nav: ExplanationNavigation; onShowTrace: (trace: AnswerTrace) => void }) {
+  const onMap = useMemo(
+    () => new Map([...turn.reached].filter(([path]) => nav.index.fileByPath.has(path))),
+    [turn.reached, nav.index],
+  );
+  if (turn.status === "streaming" || onMap.size === 0) return null;
+  return (
+    <button
+      type="button"
+      onClick={() => onShowTrace(onMap)}
+      className="cursor-pointer border border-border px-2 py-1 text-[11px] hover:bg-background"
+    >
+      Show on map <span className="tabular-nums text-muted">· {onMap.size} {onMap.size === 1 ? "file" : "files"} the tools returned</span>
+    </button>
+  );
+}
+
+export function AskPanel({ analysisId, selection, nav, onShowTrace }: {
+  analysisId: string;
+  selection: AskSelection;
+  nav: ExplanationNavigation;
+  onShowTrace: (trace: AnswerTrace) => void;
+}) {
   const [turns, setTurns] = useState<Turn[]>([]);
   const [threadId, setThreadId] = useState<string | null>(null);
   const [question, setQuestion] = useState("");
@@ -75,7 +114,7 @@ export function AskPanel({ analysisId, selection, nav }: { analysisId: string; s
   const ask = useCallback(async (text: string) => {
     const abort = new AbortController();
     controller.current = abort;
-    setTurns((current) => [...current, { question: text, selection, parts: [], status: "streaming" }]);
+    setTurns((current) => [...current, { question: text, selection, parts: [], reached: new Map(), status: "streaming" }]);
     // Scrolls once, because the user just asked; streamed text doesn't move the view.
     requestAnimationFrame(() => end.current?.scrollIntoView({ block: "end" }));
     try {
@@ -146,6 +185,7 @@ export function AskPanel({ analysisId, selection, nav }: { analysisId: string; s
                 {turn.status === "streaming" && turn.parts.length === 0 && <p className="text-[11px] text-muted">Waiting for the agent…</p>}
                 {turn.status === "stopped" && <p className="text-[11px] text-muted">Stopped.</p>}
                 {turn.status === "error" && <p className="text-[11px] text-failed">{turn.error}</p>}
+                <TraceButton turn={turn} nav={nav} onShowTrace={onShowTrace} />
               </li>
             ))}
           </ol>
