@@ -3,10 +3,10 @@ import "../scripts/load-env.mts";
 import { createHash } from "node:crypto";
 import { evaluate } from "langsmith/evaluation";
 import { classifyFile, excerptOf, type ClassifyInput } from "../lib/ai/classify.ts";
-import { MODEL } from "../lib/ai/client.ts";
+import { PROVIDER_LABELS } from "../lib/ai/client.ts";
 import { fetchFileAtCommit, parseGithubUrl } from "../lib/github-archive.ts";
 import { MODEL_ASSIGNABLE_ROLES, isModelAssignableRole } from "../lib/taxonomy.mts";
-import { NO_CACHE, ensureDataset, finishedAnalyses, flag, graphOf, langsmith, percent, type DatasetExample } from "./shared.mts";
+import { NO_CACHE, ensureDataset, finishedAnalyses, flag, graphOf, langsmith, measuredModel, percent, type DatasetExample } from "./shared.mts";
 
 // Files convention already labelled never reach the classifier in normal
 // operation, so their roles are held-out ground truth. Only roles the
@@ -82,16 +82,17 @@ function roleCorrect({ outputs, referenceOutputs }: { outputs: Record<string, un
   };
 }
 
+const choice = measuredModel();
 const client = langsmith();
 await ensureDataset(client, DATASET, "Files whose role convention assigned, with the role hidden. Ground truth for the classifier.", flag("--rebuild"), build);
 
 const results = await evaluate(
-  async (inputs: Record<string, unknown>) => (await classifyFile(asClassifyInput(inputs), NO_CACHE)).output,
+  async (inputs: Record<string, unknown>) => (await classifyFile(asClassifyInput(inputs), NO_CACHE, choice)).output,
   {
     data: DATASET,
     client,
-    experimentPrefix: "role-accuracy",
-    metadata: { model: MODEL },
+    experimentPrefix: `role-accuracy-${choice.provider}-${choice.model}`,
+    metadata: { provider: choice.provider, model: choice.model },
     maxConcurrency: 4,
     evaluators: [roleCorrect],
   },
@@ -111,7 +112,7 @@ for (const row of results.results) {
   byRole.set(expected, tally);
 }
 
-console.log(`\nRole accuracy, ${MODEL}: ${right} of ${results.results.length} (${percent(right, results.results.length)})  experiment ${results.experimentName}`);
+console.log(`\nRole accuracy, ${PROVIDER_LABELS[choice.provider]} ${choice.model}: ${right} of ${results.results.length} (${percent(right, results.results.length)})  experiment ${results.experimentName}`);
 for (const [role, tally] of byRole) {
   const misses = [...tally.answers].map(([answer, count]) => `${answer} ×${count}`).join(", ");
   console.log(`  ${role.padEnd(11)} ${String(tally.right).padStart(3)}/${tally.total}  ${misses && `missed as ${misses}`}`);

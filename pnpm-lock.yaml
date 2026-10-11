@@ -177,7 +177,7 @@ importers:
         version: 3.1.1
       '@langchain/langgraph-sdk':
         specifier: ^1.12.3
-        version: 1.12.3(@langchain/core@1.2.17(openai@7.31.0(zod@4.6.5)))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+        version: 1.12.3(@langchain/core@1.2.17(openai@7.32.0(zod@4.6.5)))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       '@supabase/ssr':
         specifier: ^0.12.7
         version: 0.12.7(@supabase/supabase-js@2.117.2)
@@ -189,13 +189,16 @@ importers:
         version: 12.12.0(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       langsmith:
         specifier: ^0.10.9
-        version: 0.10.9(openai@7.31.0(zod@4.6.5))
+        version: 0.10.9(openai@7.32.0(zod@4.6.5))
       lucide-react:
         specifier: ^1.53.0
         version: 1.53.0(@types/react@19.3.0)(react@19.2.8)
       next:
         specifier: 16.3.8
         version: 16.3.8(@babel/core@7.29.7(supports-color@7.2.0))(@types/node@20.19.43)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+      openai:
+        specifier: ^7.32.0
+        version: 7.32.0(zod@4.6.5)
       react:
         specifier: 19.2.8
         version: 19.2.8
@@ -2121,8 +2124,8 @@ packages:
     resolution: {integrity: sha512-gXah6aZrcUxjWg2zR2MwouP2eHlCBzdV4pygudehaKXSGW4v2AsRQUK+lwwXhii6KFZcunEnmSUoYp5CXibxtA==}
     engines: {node: '>= 0.4'}
 
-  openai@7.31.0:
-    resolution: {integrity: sha512-ZGAzauuYb0DdB53qVbIR+X8rdmNtWgiElrrMthbZCVreLcIsQJBwzAIWUbpB2FkQu2Cj6OJ9zJR1EKMUYn4/SQ==}
+  openai@7.32.0:
+    resolution: {integrity: sha512-avqxu/jl1gsVBCBgFNPr9sTh+wZppQphuhhFy1zEvAJxEaJ4t0ery6hZdOT9kws/EcNTARoQcZs2IT3bliE1SA==}
     engines: {node: '>=22.0.0'}
     peerDependencies:
       '@aws-sdk/credential-provider-node': '>=3.972.0 <4'
@@ -2940,12 +2943,12 @@ snapshots:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.6.0
 
-  '@langchain/core@1.2.17(openai@7.31.0(zod@4.6.5))':
+  '@langchain/core@1.2.17(openai@7.32.0(zod@4.6.5))':
     dependencies:
       '@cfworker/json-schema': 4.1.1
       '@standard-schema/spec': 1.1.0
       js-tiktoken: 1.0.21
-      langsmith: 0.10.9(openai@7.31.0(zod@4.6.5))
+      langsmith: 0.10.9(openai@7.32.0(zod@4.6.5))
       mustache: 4.2.0
       p-queue: 6.6.2
       zod: 4.6.5
@@ -2956,9 +2959,9 @@ snapshots:
       - openai
       - ws
 
-  '@langchain/langgraph-sdk@1.12.3(@langchain/core@1.2.17(openai@7.31.0(zod@4.6.5)))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)':
+  '@langchain/langgraph-sdk@1.12.3(@langchain/core@1.2.17(openai@7.32.0(zod@4.6.5)))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)':
     dependencies:
-      '@langchain/core': 1.2.17(openai@7.31.0(zod@4.6.5))
+      '@langchain/core': 1.2.17(openai@7.32.0(zod@4.6.5))
       '@langchain/protocol': 0.0.19
       '@types/json-schema': 7.0.15
       p-queue: 9.3.3
@@ -4322,11 +4325,11 @@ snapshots:
     dependencies:
       json-buffer: 3.0.1
 
-  langsmith@0.10.9(openai@7.31.0(zod@4.6.5)):
+  langsmith@0.10.9(openai@7.32.0(zod@4.6.5)):
     dependencies:
       p-queue: 6.6.2
     optionalDependencies:
-      openai: 7.31.0(zod@4.6.5)
+      openai: 7.32.0(zod@4.6.5)
 
   language-subtag-registry@0.3.23: {}
 
@@ -4523,10 +4526,9 @@ snapshots:
       define-properties: 1.2.1
       es-object-atoms: 1.1.2
 
-  openai@7.31.0(zod@4.6.5):
+  openai@7.32.0(zod@4.6.5):
     optionalDependencies:
       zod: 4.6.5
-    optional: true
 
   optionator@0.9.4:
     dependencies:

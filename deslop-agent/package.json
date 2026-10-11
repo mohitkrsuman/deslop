@@ -10,6 +10,7 @@
   "dependencies": {
     "@langchain/anthropic": "^1.5.12",
     "@langchain/core": "^1.2.17",
+    "@langchain/openai": "^1.6.2",
     "langchain": "^1.5.16",
     "managed-deepagents": "0.9.1-dev.16",
     "zod": "^4.6.5"

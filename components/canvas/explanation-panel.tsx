@@ -138,7 +138,10 @@ export function ExplanationPanel({ subject, entry, freshness, commitSha, tracing
           <FreshnessNote freshness={freshness} subject={subject} commitSha={commitSha} rerun={rerun} />
           <ExplanationText text={result.text} nav={nav} />
           {result.notes.map((note) => <p key={note} className="text-[10px] text-muted">{note}</p>)}
-          <p className="font-mono text-[10px] text-muted">{result.model} · {result.cached ? "from cache" : "written now"}</p>
+          <p className="text-[10px] text-muted">
+            <span className="font-mono">{result.model}</span> ·{" "}
+            {result.cached ? "from cache, no key used" : `written now on ${result.keySource === "organization" ? "the organization's key" : "the app's key"}`}
+          </p>
         </>
       )}
       <p className="border-t border-border pt-3 text-[10px] text-muted">

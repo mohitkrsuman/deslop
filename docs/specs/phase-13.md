@@ -64,8 +64,17 @@ OpenAI, without anything else about the product changing.
 7. Remove the key. Explanations work again on the app's key and say so.
 8. Run each eval against OpenAI. The output and the LangSmith experiment both
    name the provider and the model.
+9. With a key saved, ask a question in Ask. Its trace shows that provider's
+   model answering. Remove the key and ask again: the app's model answers.
 
-## Not in this phase
+## Ask uses the organization's key too
 
-The agent from phase 12 keeps running on the app's key. Carrying an
-organization's key into a separate service is its own question.
+- The agent asks the app for the key at the start of each question, with the
+  same grant its tools use. The grant names one analysis, so it can only ever
+  get that analysis's organization's key. The key is never in the run's
+  context, the conversation or the prompt.
+- No saved key means the app's own key for Ask. A failing organization key
+  fails the question with the provider's reason; there is no fallback.
+- Every model call the agent and its subagent make goes through that choice.
+  The agent's built-in default model holds no real key, so a call that skips
+  the choice is rejected rather than billed to the app.

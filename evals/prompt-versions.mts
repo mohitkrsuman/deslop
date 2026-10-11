@@ -3,12 +3,15 @@ import "../scripts/load-env.mts";
 import { createHash } from "node:crypto";
 import { evaluate } from "langsmith/evaluation";
 import type { EvaluationResult } from "langsmith/evaluation";
-import { JUDGE_MODEL, MODEL, complete } from "../lib/ai/client.ts";
+import { JUDGE_MODEL, PROVIDER_LABELS, appChoice, complete } from "../lib/ai/client.ts";
 import { EXPLAIN_FILE_SYSTEM, fileExplainInput, fileExplanationMessage, fileShownPaths, sourceFor, type FileExplainInput } from "../lib/ai/explain.ts";
 import { inventedPathCheck, pathsInSource } from "../lib/ai/invented-paths.ts";
 import type { ImportKind } from "../lib/parser/types.mts";
 import { RETIRED_EXPLAIN_FILE_SYSTEM } from "./retired-prompts.mts";
-import { ensureDataset, finishedAnalyses, flag, graphOf, langsmith, percent, type DatasetExample } from "./shared.mts";
+import { ensureDataset, finishedAnalyses, flag, graphOf, langsmith, measuredModel, percent, type DatasetExample } from "./shared.mts";
+
+const choice = measuredModel();
+const judge = appChoice("anthropic", JUDGE_MODEL);
 
 // The shipped explanation prompt against a retired one, as two experiments
 // over one dataset. Invented paths are counted exactly. Specificity is not
@@ -66,7 +69,7 @@ function explainWith(system: string) {
   return async (inputs: Record<string, unknown>) => {
     const input = asFileExplainInput(inputs);
     const { source, notes } = await sourceFor(input);
-    const text = await complete({ system, maxTokens: 16000, messages: [{ role: "user", content: fileExplanationMessage(input, source, notes) }] });
+    const text = await complete({ system, maxTokens: 16000, messages: [{ role: "user", content: fileExplanationMessage(input, source, notes) }] }, choice);
     return { text, sourcePaths: pathsInSource(source) };
   };
 }
@@ -100,7 +103,7 @@ async function specificity({ inputs, outputs }: { inputs: Record<string, unknown
         "", "<explanation>", outputs.text, "</explanation>",
       ].join("\n"),
     }],
-  }, JUDGE_MODEL);
+  }, judge);
   const parsed: unknown = JSON.parse(reply);
   const score = typeof parsed === "object" && parsed !== null && "score" in parsed ? parsed.score : null;
   const reason = typeof parsed === "object" && parsed !== null && "reason" in parsed ? String(parsed.reason) : "";
@@ -128,9 +131,9 @@ for (const version of versions) {
   const results = await evaluate(explainWith(version.system), {
     data: DATASET,
     client,
-    experimentPrefix: `explain-file-${version.name}`,
-    description: `Explanation prompt: ${version.name}. Specificity is scored by ${JUDGE_MODEL}, a model judging a model; no_invented_paths is exact.`,
-    metadata: { prompt: version.name, model: MODEL, judge: JUDGE_MODEL },
+    experimentPrefix: `explain-file-${version.name}-${choice.provider}-${choice.model}`,
+    description: `Explanation prompt: ${version.name}, written by ${PROVIDER_LABELS[choice.provider]} ${choice.model}. Specificity is scored by ${JUDGE_MODEL}, a model judging a model; no_invented_paths is exact.`,
+    metadata: { prompt: version.name, provider: choice.provider, model: choice.model, judge: JUDGE_MODEL },
     maxConcurrency: 4,
     evaluators: [noInventedPaths, specificity],
   });
@@ -165,7 +168,8 @@ const specific = (map: typeof current) => {
   return values.length > 0 ? `${mean(values).toFixed(2)} / 5 over ${values.length}` : "n/a";
 };
 
-console.log(`\nExperiments: ${experiments.join(" vs ")} on "${DATASET}". Compare them side by side from the dataset's Experiments tab.`);
+console.log(`\nWritten by ${PROVIDER_LABELS[choice.provider]} ${choice.model}.`);
+console.log(`Experiments: ${experiments.join(" vs ")} on "${DATASET}". Compare them side by side from the dataset's Experiments tab.`);
 console.log(`                     current            retired`);
 console.log(`no invented paths    ${clean(current).padEnd(19)}${clean(retired)}   (exact)`);
 console.log(`specificity          ${specific(current).padEnd(19)}${specific(retired)}   (judged by ${JUDGE_MODEL})`);

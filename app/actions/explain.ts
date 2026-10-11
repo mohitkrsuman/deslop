@@ -3,15 +3,15 @@
 import { createHash } from "node:crypto";
 import { auth } from "@clerk/nextjs/server";
 import { userModelCache } from "@/lib/ai/cache";
-import { MODEL } from "@/lib/ai/client";
 import { explainFile, explainFolder, fileExplainInput, folderExplainInput } from "@/lib/ai/explain";
+import { modelFor } from "@/lib/ai/keys";
 import { loadAnalysisGraph } from "@/lib/analysis-graph";
 import { foldDirectories } from "@/lib/canvas/fold";
 import { fetchFileAtCommit, fetchHeadCommit, parseGithubUrl } from "@/lib/github-archive";
 import { createServerSupabaseClient } from "@/lib/supabase";
 
 export type ExplainResult =
-  | { ok: true; text: string; notes: string[]; cached: boolean; model: string }
+  | { ok: true; text: string; notes: string[]; cached: boolean; model: string; keySource: "organization" | "app" }
   | { ok: false; error: string };
 
 export type Freshness =
@@ -55,8 +55,9 @@ export async function requestFileExplanation(analysisId: string, path: string): 
     const file = graph.files.find((item) => item.path === path);
     if (!file) return { ok: false, error: `${path} is not in this analysis.` };
     const input = fileExplainInput(analysis, graph.files, graph.edges, file);
-    const { output, cached } = await explainFile(input, userModelCache(client, organizationId));
-    return { ok: true, text: output.text, notes: output.notes, cached, model: MODEL };
+    const choice = await modelFor(organizationId);
+    const { output, cached } = await explainFile(input, userModelCache(client, organizationId), choice);
+    return { ok: true, text: output.text, notes: output.notes, cached, model: choice.model, keySource: choice.source };
   } catch (cause) {
     return { ok: false, error: messageOf(cause) };
   }
@@ -70,8 +71,9 @@ export async function requestFolderExplanation(analysisId: string, folder: strin
     const group = folding.groups.find((item) => item.folder === folder);
     if (!group) return { ok: false, error: `${folder} is not a folder on this map.` };
     const input = folderExplainInput(analysis, graph.files, graph.edges, folding, group.folder, group.files);
-    const { output, cached } = await explainFolder(input, userModelCache(client, organizationId));
-    return { ok: true, text: output.text, notes: output.notes, cached, model: MODEL };
+    const choice = await modelFor(organizationId);
+    const { output, cached } = await explainFolder(input, userModelCache(client, organizationId), choice);
+    return { ok: true, text: output.text, notes: output.notes, cached, model: choice.model, keySource: choice.source };
   } catch (cause) {
     return { ok: false, error: messageOf(cause) };
   }

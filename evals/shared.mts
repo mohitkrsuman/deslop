@@ -2,8 +2,8 @@ import "../scripts/load-env.mts";
 
 import { Client, type Example } from "langsmith";
 import type { KVMap } from "langsmith/schemas";
-import type { ModelCache } from "../lib/ai/client.ts";
-import { tracingStatus } from "../lib/ai/client.ts";
+import type { ModelCache, ModelChoice } from "../lib/ai/client.ts";
+import { PROVIDERS, appChoice, isProvider, tracingStatus } from "../lib/ai/client.ts";
 import { loadAnalysisGraph, type AnalysisGraph } from "../lib/analysis-graph.ts";
 import { createWorkerClient } from "../lib/supabase-worker.ts";
 
@@ -17,6 +17,14 @@ export function langsmith(): Client {
 
 export function projectName(): string {
   return process.env.LANGSMITH_PROJECT?.trim() || "default";
+}
+
+// --provider picks whose pinned model is measured, on the app's own key for
+// that provider. Its numbers are that provider's and are never pooled.
+export function measuredModel(): ModelChoice {
+  const value = option("--provider") ?? "anthropic";
+  if (!isProvider(value)) throw new Error(`--provider must be one of ${PROVIDERS.join(", ")}, not ${value}.`);
+  return appChoice(value);
 }
 
 // Evals measure the model, so they never answer from the cache.

@@ -53,6 +53,15 @@ export type Database = {
         };
         Insert: never; Update: never; Relationships: [];
       };
+      model_keys: {
+        // ciphertext is readable only with the server key; user tokens get the other four.
+        Row: {
+          organization_id: string; provider: string; ciphertext: string; last_four: string; updated_at: string;
+        };
+        Insert: { organization_id: string; provider: string; ciphertext: string; last_four: string; updated_at?: string };
+        Update: { provider?: string; ciphertext?: string; last_four?: string; updated_at?: string };
+        Relationships: [];
+      };
       routes: {
         Row: {
           id: string; analysis_id: string; organization_id: string;
@@ -77,7 +86,12 @@ export type Database = {
       };
     };
     Views: Record<string, never>;
-    Functions: Record<string, never>;
+    Functions: {
+      agent_grant_model_key: {
+        Args: Record<string, never>;
+        Returns: { organization_id: string; provider: string | null; ciphertext: string | null }[];
+      };
+    };
     Enums: Record<string, never>;
     CompositeTypes: Record<string, never>;
   };

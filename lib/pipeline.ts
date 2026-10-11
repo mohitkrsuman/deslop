@@ -3,7 +3,8 @@ import "server-only";
 import { readFile, rm } from "node:fs/promises";
 import path from "node:path";
 import { classifyFile, excerptOf } from "@/lib/ai/classify";
-import { MODEL } from "@/lib/ai/client";
+import type { ModelChoice } from "@/lib/ai/client";
+import { modelFor } from "@/lib/ai/keys";
 import { workerModelCache } from "@/lib/ai/cache";
 import { fetchGithubArchive, parseGithubUrl } from "@/lib/github-archive";
 import { FRAMEWORK_ADAPTERS } from "@/lib/parser/adapters/index.mts";
@@ -88,6 +89,15 @@ async function labelUnidentified(
   const imports = new Map<string, Set<string>>();
   for (const edge of result.edges) imports.set(edge.from, (imports.get(edge.from) ?? new Set()).add(edge.to));
 
+  // The organization's key when it has one. If that key can't be used, the
+  // files stay unidentified and the reason is recorded; the app's key is not
+  // tried in its place.
+  let choice: ModelChoice;
+  try {
+    choice = await modelFor(organizationId);
+  } catch (cause) {
+    return `${targets.length} files could not be labelled: ${cause instanceof Error ? cause.message : String(cause)}`;
+  }
   const cache = workerModelCache(organizationId);
   const rows: { organization_id: string; analysis_id: string; file_id: string; role: string; model: string }[] = [];
   const failures: string[] = [];
@@ -99,9 +109,9 @@ async function labelUnidentified(
         const source = await readFile(path.join(directory, file.path), "utf8");
         const { output } = await classifyFile({
           path: file.path, sha256: file.sha256, imports: [...imports.get(file.path) ?? []].sort(), excerpt: excerptOf(source),
-        }, cache);
+        }, cache, choice);
         if (output.role !== "none") {
-          rows.push({ organization_id: organizationId, analysis_id: id, file_id: ids.get(file.path)!, role: output.role, model: MODEL });
+          rows.push({ organization_id: organizationId, analysis_id: id, file_id: ids.get(file.path)!, role: output.role, model: choice.model });
         }
       } catch (cause) {
         failures.push(`${file.path}: ${cause instanceof Error ? cause.message : String(cause)}`);
