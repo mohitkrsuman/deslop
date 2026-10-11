@@ -25,6 +25,8 @@ export type Database = {
           coverage_percent: number | null;
           import_count: number | null;
           labelling_error: string | null;
+          // GitHub's own answer, recorded when read with the organization's token.
+          private: boolean;
           organization_id: string;
           project_id: string;
         };
@@ -60,6 +62,15 @@ export type Database = {
         };
         Insert: { organization_id: string; provider: string; ciphertext: string; last_four: string; updated_at?: string };
         Update: { provider?: string; ciphertext?: string; last_four?: string; updated_at?: string };
+        Relationships: [];
+      };
+      github_tokens: {
+        // ciphertext is readable only with the server key; user tokens get the rest.
+        Row: {
+          organization_id: string; ciphertext: string; last_four: string; expires_at: string | null; updated_at: string;
+        };
+        Insert: { organization_id: string; ciphertext: string; last_four: string; expires_at: string | null; updated_at?: string };
+        Update: { ciphertext?: string; last_four?: string; expires_at?: string | null; updated_at?: string };
         Relationships: [];
       };
       routes: {

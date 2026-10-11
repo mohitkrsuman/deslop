@@ -7,6 +7,7 @@ import type { ModelChoice } from "@/lib/ai/client";
 import { modelFor } from "@/lib/ai/keys";
 import { workerModelCache } from "@/lib/ai/cache";
 import { fetchGithubArchive, parseGithubUrl } from "@/lib/github-archive";
+import { githubTokenFor } from "@/lib/github-token";
 import { FRAMEWORK_ADAPTERS } from "@/lib/parser/adapters/index.mts";
 import { parseRepository } from "@/lib/parser/parse.mts";
 import type { ParserResult } from "@/lib/parser/types.mts";
@@ -35,7 +36,9 @@ function coveragePercent(result: ParserResult): number {
   return Math.round(Math.min(files, resolved) * 10000) / 100;
 }
 
-async function storeResult(client: Worker, id: string, organizationId: string, result: ParserResult, commitSha: string): Promise<Map<string, string>> {
+async function storeResult(
+  client: Worker, id: string, organizationId: string, result: ParserResult, commitSha: string, isPrivate: boolean,
+): Promise<Map<string, string>> {
   const removed = await client.from("files").delete().eq("analysis_id", id);
   if (removed.error) throw removed.error;
 
@@ -70,7 +73,7 @@ async function storeResult(client: Worker, id: string, organizationId: string, r
     if (error) throw error;
   }
   const { error } = await client.from("analyses").update({
-    commit_sha: commitSha, adapter: result.adapter, coverage: result.coverage,
+    commit_sha: commitSha, private: isPrivate, adapter: result.adapter, coverage: result.coverage,
     coverage_percent: coveragePercent(result), import_count: result.coverage.imports.found,
   }).eq("id", id);
   if (error) throw error;
@@ -135,9 +138,11 @@ export async function runAnalysis(id: string, organizationId: string, repository
   let currentStage: PipelineStage = "fetching";
   let directory: string | undefined;
   try {
-    await stage(client, id, currentStage, "Fetching the public repository archive");
+    await stage(client, id, currentStage, "Fetching the repository archive");
     const repository = parseGithubUrl(repositoryUrl);
-    const archive = await fetchGithubArchive(repository);
+    // The organization's token whenever one is set, for public repositories
+    // too. If it is rejected the run fails; it is not retried anonymously.
+    const archive = await fetchGithubArchive(repository, await githubTokenFor(organizationId));
     directory = archive.directory;
     currentStage = "selecting";
     await stage(client, id, currentStage, "Selecting source files");
@@ -146,7 +151,7 @@ export async function runAnalysis(id: string, organizationId: string, repository
     const result = await parseRepository(directory, FRAMEWORK_ADAPTERS);
     currentStage = "storing";
     await stage(client, id, currentStage, "Storing the map and coverage report");
-    const ids = await storeResult(client, id, organizationId, result, archive.commitSha);
+    const ids = await storeResult(client, id, organizationId, result, archive.commitSha, archive.private);
     currentStage = "labelling";
     await stage(client, id, currentStage, "Labelling files no adapter identified");
     const labellingError = await labelUnidentified(client, id, organizationId, directory, result, ids);

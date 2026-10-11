@@ -4,7 +4,7 @@ import { createHash } from "node:crypto";
 import { cachedTask } from "./client.ts";
 import { inventedPathCheck, pathsInSource } from "./invented-paths.ts";
 import type { Folding } from "../canvas/fold.ts";
-import { fetchFileAtCommit, parseGithubUrl } from "../github-archive.ts";
+import { fetchFileAtCommit, parseGithubUrl, type GithubToken } from "../github-archive.ts";
 import type { Edge, FileNode, ImportKind } from "../parser/types.mts";
 import { GENERIC_ROLES, taxonomyFor } from "../taxonomy.mts";
 
@@ -92,8 +92,8 @@ export function fileExplainInput(
 const MAX_SOURCE_LINES = 1500;
 const MAX_SOURCE_CHARS = 60000;
 
-export async function sourceFor(input: FileExplainInput): Promise<{ source: string; notes: string[] }> {
-  const bytes = await fetchFileAtCommit(parseGithubUrl(input.origin.repositoryUrl), input.origin.commitSha, input.path);
+export async function sourceFor(input: FileExplainInput, token: GithubToken): Promise<{ source: string; notes: string[] }> {
+  const bytes = await fetchFileAtCommit(parseGithubUrl(input.origin.repositoryUrl), input.origin.commitSha, input.path, token);
   if (!bytes) throw new Error(`${input.path} is missing from the analysed commit.`);
   if (createHash("sha256").update(bytes).digest("hex") !== input.sha256) {
     throw new Error(`${input.path} at the analysed commit does not match what was parsed.`);
@@ -140,13 +140,14 @@ export function fileShownPaths(input: { path: string; imports: { path: string }[
   return [input.path, ...input.imports.map((item) => item.path), ...input.importedBy.map((item) => item.path)];
 }
 
-export const explainFile = cachedTask<FileExplainInput, Explanation>({
+// The token is context, not input: it must not reach the cache key or the trace.
+export const explainFile = cachedTask<FileExplainInput, Explanation, GithubToken>({
   name: "explain-file",
   version: 1,
   keyOf: ({ repository, framework, path, role, sha256, lineCount, imports, importedBy }) =>
     ({ repository, framework, path, role, sha256, lineCount, imports, importedBy }),
-  async prepare(input) {
-    const { source, notes } = await sourceFor(input);
+  async prepare(input, token) {
+    const { source, notes } = await sourceFor(input, token);
     return {
       read: (text) => ({ text, notes, sourcePaths: pathsInSource(source) }),
       request: {

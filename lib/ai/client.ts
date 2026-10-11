@@ -78,7 +78,9 @@ export interface CompletionRequest {
   maxTokens: number;
 }
 
-export interface CachedTask<Input, Output> {
+// Context reaches prepare but never the trace: it may carry a credential, such
+// as the GitHub token a source read needs.
+export interface CachedTask<Input, Output, Context = void> {
   name: string;
   // Bump when the prompt changes, so old answers to a different question miss.
   version: number;
@@ -87,7 +89,7 @@ export interface CachedTask<Input, Output> {
   // Only called on a miss, so expensive context (fetching source) is skipped on
   // a hit. Returns the call to make and how to read its reply; reading throws
   // when the reply is outside what the task permits.
-  prepare(input: Input): Promise<{ request: CompletionRequest; read(text: string): Output }>;
+  prepare(input: Input, context: Context): Promise<{ request: CompletionRequest; read(text: string): Output }>;
   isOutput(value: unknown): value is Output;
   // Deterministic checks scored on every run, cache hits included, and
   // recorded as feedback on that run: evaluation of real traffic.
@@ -268,13 +270,15 @@ export async function verifyKey(provider: Provider, apiKey: string): Promise<voi
 // The cache read happens inside the traced run, so a hit is recorded as a run
 // with no model call in it. A cache read outside the trace would make a
 // working cache and a broken one look the same.
-export function cachedTask<Input, Output>(task: CachedTask<Input, Output>) {
+export function cachedTask<Input, Output, Context = void>(task: CachedTask<Input, Output, Context>) {
   const run = traceable(
-    async ({ input, cache, choice, trace }: { input: Input; cache: ModelCache; choice: ModelChoice; trace: { run?: RunTree } }): Promise<CachedResult<Output>> => {
+    async ({ input, cache, choice, context, trace }: {
+      input: Input; cache: ModelCache; choice: ModelChoice; context: Context; trace: { run?: RunTree };
+    }): Promise<CachedResult<Output>> => {
       const key = cacheKey(choice, task.name, task.version, task.keyOf(input));
       const stored = await cache.read(key);
       const result: CachedResult<Output> = task.isOutput(stored) ? { output: stored, cached: true } : await (async () => {
-        const { request, read } = await task.prepare(input);
+        const { request, read } = await task.prepare(input, context);
         const output = read(await complete(request, choice));
         await cache.write(key, { task: task.name, model: choice.model, output });
         return { output, cached: false };
@@ -287,7 +291,7 @@ export function cachedTask<Input, Output>(task: CachedTask<Input, Output>) {
       name: task.name,
       run_type: "chain",
       metadata: { version: task.version },
-      // Named fields only: the choice carries the key.
+      // Named fields only: the choice carries the key, the context may carry a token.
       processInputs: (inputs) => {
         const choice: unknown = inputs.choice;
         if (typeof choice !== "object" || choice === null) return { input: inputs.input };
@@ -296,9 +300,9 @@ export function cachedTask<Input, Output>(task: CachedTask<Input, Output>) {
       },
     },
   );
-  return async (input: Input, cache: ModelCache, choice: ModelChoice): Promise<CachedResult<Output>> => {
+  return async (input: Input, cache: ModelCache, choice: ModelChoice, context: Context): Promise<CachedResult<Output>> => {
     const trace: { run?: RunTree } = {};
-    const result = await run({ input, cache, choice, trace });
+    const result = await run({ input, cache, choice, context, trace });
     // Scored once the run has ended, so the feedback has a finished run to attach to.
     if (trace.run && task.liveChecks) void recordChecks(trace.run, task.liveChecks(input, result.output));
     return result;

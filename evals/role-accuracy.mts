@@ -31,7 +31,7 @@ async function build(): Promise<DatasetExample[]> {
         role: file.kind,
         // Stable but unrelated to path, so one folder doesn't fill a role's quota.
         order: createHash("sha256").update(`${analysis.id}:${file.path}`).digest("hex"),
-        fetch: () => fetchFileAtCommit(repository, analysis.commitSha, file.path),
+        fetch: () => fetchFileAtCommit(repository, analysis.commitSha, file.path, null),
         example: {
           inputs: { path: file.path, sha256: file.sha256, imports: [...imports.get(file.path) ?? []].sort() },
           outputs: { role: file.kind },

@@ -38,7 +38,7 @@ async function build(): Promise<DatasetExample[]> {
       const input = fileExplainInput(analysis, graph.files, graph.edges, file);
       // A file whose source can't be fetched at its commit would fail in both
       // experiments alike; leave it out rather than score an error.
-      try { await sourceFor(input); } catch { continue; }
+      try { await sourceFor(input, null); } catch { continue; }
       examples.push({ inputs: { ...input }, metadata: { repository: analysis.name } });
       taken += 1;
     }
@@ -68,7 +68,7 @@ function asFileExplainInput(inputs: Record<string, unknown>): FileExplainInput {
 function explainWith(system: string) {
   return async (inputs: Record<string, unknown>) => {
     const input = asFileExplainInput(inputs);
-    const { source, notes } = await sourceFor(input);
+    const { source, notes } = await sourceFor(input, null);
     const text = await complete({ system, maxTokens: 16000, messages: [{ role: "user", content: fileExplanationMessage(input, source, notes) }] }, choice);
     return { text, sourcePaths: pathsInSource(source) };
   };

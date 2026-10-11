@@ -51,7 +51,7 @@ test("canonical GitHub URLs and commit-pinned archive extraction", async () => {
     return calls.length === 1 ? Response.json({ sha }) : new Response(archive);
   };
   try {
-    const result = await fetchGithubArchive(repo);
+    const result = await fetchGithubArchive(repo, null);
     try {
       assert.equal(result.commitSha, sha);
       assert.equal(await readFile(`${result.directory}/src/index.ts`, "utf8"), "export const ready = true;\n");
@@ -74,7 +74,7 @@ test("archives above 30 MB extract and the 1 GB download limit is enforced", asy
     ? Response.json({ sha })
     : new Response(archive, { headers: { "content-length": String(archive.length) } });
   try {
-    const result = await fetchGithubArchive(repo);
+    const result = await fetchGithubArchive(repo, null);
     try {
       assert.equal((await stat(`${result.directory}/src/data.bin`)).size, 31 * 1024 * 1024);
     } finally { await rm(result.directory, { recursive: true, force: true }); }
@@ -82,7 +82,7 @@ test("archives above 30 MB extract and the 1 GB download limit is enforced", asy
     globalThis.fetch = async (input) => String(input).includes("/commits/HEAD")
       ? Response.json({ sha })
       : new Response("too large", { headers: { "content-length": String(1024 ** 3 + 1) } });
-    await assert.rejects(fetchGithubArchive(repo), /1 GB download limit/);
+    await assert.rejects(fetchGithubArchive(repo, null), /1 GB download limit/);
   } finally { globalThis.fetch = originalFetch; }
 });
 
@@ -100,7 +100,7 @@ test("tar extraction handles PAX paths and skips symbolic links", async () => {
   globalThis.fetch = async (input) => String(input).includes("/commits/HEAD")
     ? Response.json({ sha }) : new Response(archive);
   try {
-    const result = await fetchGithubArchive(repo);
+    const result = await fetchGithubArchive(repo, null);
     try {
       assert.equal(await readFile(`${result.directory}/src/${"nested/".repeat(18)}index.ts`, "utf8"),
         "export const value = 1;\n");
@@ -120,6 +120,6 @@ test("tar extraction rejects traversal paths", async () => {
   globalThis.fetch = async (input) => String(input).includes("/commits/HEAD")
     ? Response.json({ sha }) : new Response(archive);
   try {
-    await assert.rejects(fetchGithubArchive(repo), /unsafe path/);
+    await assert.rejects(fetchGithubArchive(repo, null), /unsafe path/);
   } finally { globalThis.fetch = originalFetch; }
 });

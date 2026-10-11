@@ -43,11 +43,13 @@ export interface StoredAnalysis {
 
 // Every finished analysis, across organizations: datasets are built by an
 // operator from the server side, not by a signed-in user.
+// Public repositories only. Datasets are shared outside any one organization
+// and hold source excerpts, so a private repository's code never goes in.
 export async function finishedAnalyses(): Promise<StoredAnalysis[]> {
   const client = createWorkerClient();
   const { data, error } = await client.from("analyses")
     .select("id,name,adapter,commit_sha,projects(repository_url)")
-    .eq("status", "complete").not("commit_sha", "is", null).order("created_at").limit(50);
+    .eq("status", "complete").eq("private", false).not("commit_sha", "is", null).order("created_at").limit(50);
   if (error) throw error;
   const rows: StoredAnalysis[] = [];
   for (const row of data ?? []) {

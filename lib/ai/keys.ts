@@ -4,7 +4,8 @@ import { MODELS, appChoice, isProvider, type ModelChoice, type Provider } from "
 import { openKey, sealKey } from "./sealed-key.ts";
 import { createWorkerClient } from "../supabase-worker.ts";
 
-function secret(): Buffer {
+// Also seals the organization's GitHub token, bound to a different purpose.
+export function secret(): Buffer {
   const raw = process.env.MODEL_KEY_SECRET?.trim();
   if (!raw) throw new Error("MODEL_KEY_SECRET is not set in .env.local.");
   const key = Buffer.from(raw, "base64");

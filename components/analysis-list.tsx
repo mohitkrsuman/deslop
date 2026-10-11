@@ -9,7 +9,7 @@ import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
 
 export type AnalysisSummary = {
   id: string; name: string; status: string; stage: string; stage_message: string;
-  stage_started_at: string; created_at: string; finished_at: string | null;
+  stage_started_at: string; created_at: string; finished_at: string | null; private: boolean;
 };
 
 const formatter = new Intl.DateTimeFormat("en", { dateStyle: "medium", timeStyle: "short", timeZone: "UTC" });
@@ -66,7 +66,8 @@ export function AnalysisList({ initial, orgId, canDelete }: { initial: AnalysisS
           <tbody>{visibleRows.map((row, index) => {
             const stale = row.status !== "complete" && row.status !== "failed" && now - new Date(row.stage_started_at).getTime() > staleAfter;
             return <tr key={row.id} className="border-b border-border last:border-0">
-              <th className="px-4 py-4 font-medium"><Link href={`/analysis/${row.id}`} className="hover:underline">{row.name}</Link></th>
+              <th className="px-4 py-4 font-medium"><Link href={`/analysis/${row.id}`} className="hover:underline">{row.name}</Link>
+                {row.private && <span className="ml-2 border border-border px-1 font-normal text-muted">private</span>}</th>
               <td className="px-4 py-4"><Link href={`/analysis/${row.id}`} className="hover:underline">
                 <span className={row.status === "failed" ? "text-failed" : row.status === "complete" ? "text-incoming" : "text-outgoing"}>
                   {stale ? "Stale" : row.stage.charAt(0).toUpperCase() + row.stage.slice(1)}
