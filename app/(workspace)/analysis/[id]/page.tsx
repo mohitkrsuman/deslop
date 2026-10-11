@@ -7,7 +7,7 @@ import { AnalysisSettingsButton } from "@/components/analysis-settings-button";
 import { ProgressStream } from "@/components/progress-stream";
 import { createServerSupabaseClient } from "@/lib/supabase";
 import { tracingStatus } from "@/lib/ai/client";
-import { coverageOf, loadAnalysisGraph } from "@/lib/analysis-graph";
+import { coverageOf, loadAnalysisGraph, loadComparison } from "@/lib/analysis-graph";
 
 export const maxDuration = 900;
 
@@ -31,14 +31,17 @@ export default async function AnalysisPage({ params }: PageProps<"/analysis/[id]
         <form action={rerun}><button className="border border-border px-3 py-2 text-xs hover:bg-surface">Run again</button></form>
       </div>
     </div>
-    <ProgressStream id={id} initial={{ stage: analysis.stage, message: analysis.stage_message,
+    <ProgressStream key={`${analysis.stage}:${analysis.stage_started_at}`} id={id} initial={{ stage: analysis.stage, message: analysis.stage_message,
       stageStartedAt: analysis.stage_started_at, status: analysis.status }} />
     {analysis.status === "failed" && analysis.error_message &&
       <p className="mt-4 text-center text-xs text-failed">{analysis.error_message}</p>}
   </section>;
 
   const adapter = analysis.adapter ?? "fallback";
-  const { files, edges, routes, modelRoles } = await loadAnalysisGraph(client, id, adapter);
+  const [{ files, edges, routes, modelRoles }, comparison] = await Promise.all([
+    loadAnalysisGraph(client, id, adapter),
+    loadComparison(client, id, analysis.commit_sha, adapter),
+  ]);
   const coverage = coverageOf(analysis.coverage, files, edges);
 
   return <div className="flex h-full min-h-0 flex-col">
@@ -57,7 +60,7 @@ export default async function AnalysisPage({ params }: PageProps<"/analysis/[id]
         importCount={analysis.import_count ?? 0} files={files} edges={edges} routes={routes}
         coverage={coverage}
         coveragePercent={analysis.coverage_percent ?? 100}
-        modelRoles={modelRoles} labellingError={analysis.labelling_error}
+        modelRoles={modelRoles} labellingError={analysis.labelling_error} comparison={comparison}
         tracing={tracingStatus()} rerun={rerun} />
     </div>
   </div>;

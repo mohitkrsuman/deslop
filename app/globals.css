@@ -23,6 +23,9 @@
   --kind-4: #4338ca;
   --kind-5: #a21caf;
   --kind-6: #57534e;
+  /* A comparison's added and removed. They mean only that, never good or bad. */
+  --added: #0f766e;
+  --removed: #9a3412;
 }
 
 :root.dark {
@@ -42,6 +45,8 @@
   --kind-4: #818cf8;
   --kind-5: #e879f9;
   --kind-6: #a8a29e;
+  --added: #2dd4bf;
+  --removed: #fb923c;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -62,6 +67,8 @@
     --kind-4: #818cf8;
     --kind-5: #e879f9;
     --kind-6: #a8a29e;
+    --added: #2dd4bf;
+    --removed: #fb923c;
   }
 }
 
@@ -75,6 +82,8 @@
   --color-incoming: var(--incoming);
   --color-outgoing: var(--outgoing);
   --color-failed: var(--failed);
+  --color-added: var(--added);
+  --color-removed: var(--removed);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }

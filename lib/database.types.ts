@@ -87,6 +87,18 @@ export type Database = {
         };
         Insert: never; Update: never; Relationships: [];
       };
+      comparisons: {
+        Row: {
+          id: string; organization_id: string; analysis_id: string; ref: string;
+          base_sha: string; after_sha: string | null;
+          status: "queued" | "analyzing" | "complete" | "failed";
+          stage: "queued" | "resolving" | "fetching" | "parsing" | "comparing" | "complete" | "failed";
+          stage_message: string; stage_started_at: string; finished_at: string | null;
+          error_message: string | null; after_adapter: string | null;
+          after_coverage: unknown; diff: unknown; created_at: string;
+        };
+        Insert: never; Update: never; Relationships: [];
+      };
       agent_grants: {
         Row: {
           id: string; token_hash: string; analysis_id: string; organization_id: string;

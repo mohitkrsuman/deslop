@@ -183,11 +183,53 @@ export async function fetchFileAtCommit(repository: Repository, commitSha: strin
   return Buffer.from(await response.arrayBuffer());
 }
 
-// With a token the archive comes from the API, which redirects to a
-// short-lived signed download; the token itself isn't sent past the redirect.
+const SHA = /^[a-f0-9]{40}$/;
+
+// What a comparison's "after" names, resolved to one exact commit before
+// anything is read: a pull request (#12, or its URL in this repository), or
+// anything GitHub resolves as a commit — a branch, tag or SHA. A name that
+// doesn't resolve fails; it is never swapped for the default branch.
+export async function resolveRef(repository: Repository, input: string, token: GithubToken): Promise<{ sha: string; label: string }> {
+  const ref = input.trim();
+  const prUrl = ref.match(/^https:\/\/github\.com\/([^/]+)\/([^/]+)\/pull\/(\d+)(?:[/?#].*)?$/i);
+  if (prUrl && `${prUrl[1]}/${prUrl[2]}`.toLowerCase() !== repository.name) {
+    throw new Error(`That pull request is in ${prUrl[1]}/${prUrl[2]}, not ${repository.name}.`);
+  }
+  const pr = prUrl?.[3] ?? ref.match(/^#(\d+)$/)?.[1];
+  if (pr) {
+    const api = await fetch(`https://api.github.com/repos/${repository.owner}/${repository.repo}/pulls/${pr}`, {
+      headers: headers(token), signal: AbortSignal.timeout(30000), cache: "no-store",
+    });
+    if (api.status === 404) throw new Error(`${repository.name} has no pull request #${pr}.`);
+    if (!api.ok) throw await githubFailure(api, token, "pull request lookup");
+    const body = await api.json() as { head?: { sha?: unknown } };
+    if (typeof body.head?.sha !== "string" || !SHA.test(body.head.sha)) throw new Error("GitHub did not return the pull request's head commit.");
+    return { sha: body.head.sha, label: `#${pr}` };
+  }
+  if (!/^[A-Za-z0-9._/-]{1,250}$/.test(ref) || ref.startsWith("-") || ref.includes("..")) {
+    throw new Error("Name a branch, tag, commit SHA, or pull request (#12 or its URL).");
+  }
+  const api = await fetch(`https://api.github.com/repos/${repository.owner}/${repository.repo}/commits/${encodeURIComponent(ref)}`, {
+    headers: headers(token), signal: AbortSignal.timeout(30000), cache: "no-store",
+  });
+  if (api.status === 404 || api.status === 422) {
+    throw new Error(`${repository.name} has no branch, tag or commit named ${ref}.`);
+  }
+  if (!api.ok) throw await githubFailure(api, token, "commit lookup");
+  const commit = await api.json() as { sha?: unknown };
+  if (typeof commit.sha !== "string" || !SHA.test(commit.sha)) throw new Error("GitHub did not return a commit SHA.");
+  return { sha: commit.sha, label: ref };
+}
+
 export async function fetchGithubArchive(repository: Repository, token: GithubToken) {
   const isPrivate = token ? await fetchPrivate(repository, token) : false;
   const commitSha = await fetchHeadCommit(repository, token);
+  return { directory: await fetchArchiveAt(repository, commitSha, token), commitSha, private: isPrivate };
+}
+
+// With a token the archive comes from the API, which redirects to a
+// short-lived signed download; the token itself isn't sent past the redirect.
+export async function fetchArchiveAt(repository: Repository, commitSha: string, token: GithubToken): Promise<string> {
   const response = token
     ? await fetch(`https://api.github.com/repos/${repository.owner}/${repository.repo}/tarball/${commitSha}`, {
       headers: headers(token), signal: AbortSignal.timeout(10 * 60 * 1000), cache: "no-store",
@@ -201,7 +243,7 @@ export async function fetchGithubArchive(repository: Repository, token: GithubTo
   try {
     await downloadArchive(response, archivePath, token);
     await extractArchive(archivePath, directory);
-    return { directory, commitSha, private: isPrivate };
+    return directory;
   } catch (error) {
     await rm(directory, { recursive: true, force: true });
     throw error;

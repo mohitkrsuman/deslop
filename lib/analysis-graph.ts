@@ -2,7 +2,9 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { RouteRow } from "../components/canvas/route-table.tsx";
+import type { ComparisonView } from "./canvas/comparison.ts";
 import type { Database } from "./database.types.ts";
+import type { MapComparison } from "./graph/compare.ts";
 import type { Edge, FileNode, ImportKind, ParserCoverage } from "./parser/types.mts";
 import { GENERIC_ROLES, isModelAssignableRole, normalizeRole } from "./taxonomy.mts";
 
@@ -14,7 +16,7 @@ export interface AnalysisGraph {
   modelRoles: string[];
 }
 
-async function readAll<Row>(page: (from: number, to: number) => PromiseLike<{ data: Row[] | null; error: unknown }>): Promise<Row[]> {
+export async function readAll<Row>(page: (from: number, to: number) => PromiseLike<{ data: Row[] | null; error: unknown }>): Promise<Row[]> {
   const rows: Row[] = [];
   for (let offset = 0; ; offset += 1000) {
     const { data, error } = await page(offset, offset + 999);
@@ -67,6 +69,34 @@ export async function loadAnalysisGraph(client: SupabaseClient<Database>, analys
     if (file) routes.push({ file, method: row.method, path: row.path });
   }
   return { files, edges, routes, modelRoles };
+}
+
+function isComparison(value: unknown): value is MapComparison {
+  if (typeof value !== "object" || value === null) return false;
+  const fields = ["added", "removed", "changed", "unparsed", "addedEdges", "removedEdges"] as const;
+  return fields.every((field) => field in value && Array.isArray((value as Record<string, unknown>)[field]));
+}
+
+// The analysis's comparison, read through the user's client, or null. One
+// whose "before" isn't this analysis's commit any more isn't shown at all.
+export async function loadComparison(
+  client: SupabaseClient<Database>, analysisId: string, commitSha: string | null, adapter: string,
+): Promise<ComparisonView | null> {
+  const { data, error } = await client.from("comparisons")
+    .select("ref,base_sha,after_sha,status,stage,stage_message,stage_started_at,error_message,after_coverage,diff")
+    .eq("analysis_id", analysisId).maybeSingle();
+  if (error) throw error;
+  if (!data || data.base_sha !== commitSha) return null;
+  const diff = isComparison(data.diff) ? {
+    ...data.diff,
+    // Added files are drawn beside the base map, so their roles read against its adapter.
+    added: data.diff.added.map((file) => ({ ...file, kind: normalizeRole(adapter, file.kind) })),
+  } : null;
+  return {
+    ref: data.ref, baseSha: data.base_sha, afterSha: data.after_sha, status: data.status, stage: data.stage,
+    stageMessage: data.stage_message, stageStartedAt: data.stage_started_at, errorMessage: data.error_message,
+    diff, afterCoverage: data.after_coverage ? coverageOf(data.after_coverage, [], []) : null,
+  };
 }
 
 // Analyses stored before route notes existed have none to show.

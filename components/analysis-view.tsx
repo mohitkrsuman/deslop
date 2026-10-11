@@ -4,11 +4,13 @@ import { useCallback, useMemo, useState } from "react";
 import { AnalysisShell } from "@/components/analysis-shell";
 import { AskPanel, type AnswerTrace, type AskSelection } from "@/components/canvas/ask-panel";
 import { CategoryRail } from "@/components/canvas/category-rail";
+import { ComparisonPanel } from "@/components/canvas/comparison-panel";
 import { DependencyMap } from "@/components/canvas/dependency-map";
 import { DetailPane } from "@/components/canvas/detail-pane";
 import { InsightsPanel } from "@/components/canvas/insights-panel";
 import { RouteTable, type RouteRow } from "@/components/canvas/route-table";
 import { categoriesOf, categoryFilterFor, pathFilterFor } from "@/lib/canvas/categories";
+import { changeFilterFor, changeMarksFor, type ComparisonView } from "@/lib/canvas/comparison";
 import { buildDetailIndex } from "@/lib/canvas/details";
 import { foldDirectories } from "@/lib/canvas/fold";
 import { type HoverTarget, type Selection } from "@/lib/canvas/selection";
@@ -32,6 +34,7 @@ export function AnalysisView({
   routes,
   coverage,
   coveragePercent,
+  comparison,
 }: {
   analysisId: string;
   commitSha: string | null;
@@ -47,9 +50,17 @@ export function AnalysisView({
   routes: RouteRow[];
   coverage: ParserCoverage;
   coveragePercent: number;
+  comparison: ComparisonView | null;
 }) {
   const categories = useMemo(() => categoriesOf(files, adapter), [files, adapter]);
-  const folding = useMemo(() => foldDirectories(files), [files]);
+  // With a complete comparison the map is drawn once over both sides, so
+  // dimming the unchanged moves nothing. Everything else stays on the base.
+  const diff = comparison?.status === "complete" ? comparison.diff : null;
+  const mapFiles = useMemo(() => diff ? [...files, ...diff.added] : files, [files, diff]);
+  const mapEdges = useMemo(() => diff ? [...edges, ...diff.addedEdges] : edges, [edges, diff]);
+  const changes = useMemo(() => diff ? changeMarksFor(diff) : null, [diff]);
+  const [dimUnchanged, setDimUnchanged] = useState(false);
+  const folding = useMemo(() => foldDirectories(mapFiles), [mapFiles]);
   const index = useMemo(() => buildDetailIndex(files, edges), [files, edges]);
   const insights = useMemo(() => buildInsights(files, index), [files, index]);
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
@@ -60,9 +71,13 @@ export function AnalysisView({
   const traceFilter = useMemo(() => trace
     ? pathFilterFor(folding, new Set([...trace.hops].filter(([, hops]) => hops <= trace.shown).map(([path]) => path)))
     : null, [trace, folding]);
+  const changeFilter = useMemo(
+    () => dimUnchanged && changes ? changeFilterFor(folding, changes) : null,
+    [dimUnchanged, changes, folding],
+  );
   const categoryFilter = useMemo(
-    () => traceFilter ?? categoryFilterFor(files, folding, activeCategory, adapter),
-    [traceFilter, files, folding, activeCategory, adapter],
+    () => traceFilter ?? changeFilter ?? categoryFilterFor(files, folding, activeCategory, adapter),
+    [traceFilter, changeFilter, files, folding, activeCategory, adapter],
   );
   const [openFolders, setOpenFolders] = useState<ReadonlySet<string>>(() => new Set());
   const [selection, setSelection] = useState<Selection>(null);
@@ -85,13 +100,22 @@ export function AnalysisView({
     const folders = new Set([...hops.keys()].flatMap((path) => folding.groupOf.get(path) ?? []));
     setOpenFolders((current) => new Set([...current, ...folders]));
     setActiveCategory(null);
+    setDimUnchanged(false);
     setSelection(null);
     setHovered(null);
     setMainView("map");
     setTrace({ hops, shown: 0 });
   }, [folding]);
+  const changeDimming = useCallback((dim: boolean) => {
+    setTrace(null);
+    setActiveCategory(null);
+    setSelection(null);
+    setHovered(null);
+    setMainView("map");
+    setDimUnchanged(dim);
+  }, []);
   const modelRoleSet = useMemo(() => new Set(modelRoles), [modelRoles]);
-  const [paneMode, setPaneMode] = useState<"details" | "ask">("details");
+  const [paneMode, setPaneMode] = useState<"details" | "ask" | "changes">("details");
   const askSelection = useMemo<AskSelection>(() => {
     if (selection?.kind === "row") return { kind: "file", path: selection.path };
     if (selection?.kind !== "node") return null;
@@ -105,6 +129,7 @@ export function AnalysisView({
         <>
           <CategoryRail categories={categories} activeCategory={activeCategory} onCategoryChange={(role) => {
             setTrace(null);
+            setDimUnchanged(false);
             setActiveCategory(role);
             setSelection(null);
             setHovered(null);
@@ -138,10 +163,11 @@ export function AnalysisView({
         {/* Hidden rather than unmounted, so the map keeps its viewport and open folders. */}
         <div className={`relative min-h-0 flex-1 ${mainView === "map" ? "" : "hidden"}`}>
         <DependencyMap
-          files={files}
-          edges={edges}
+          files={mapFiles}
+          edges={mapEdges}
           categories={categories}
           categoryFilter={categoryFilter}
+          changes={changes}
           folding={folding}
           openFolders={openFolders}
           onOpenFoldersChange={setOpenFolders}
@@ -181,7 +207,7 @@ export function AnalysisView({
           {/* Ask is a mode of the whole pane, not a tab beside Structure: a
               repository question doesn't need a file selected. */}
           <div role="tablist" aria-label="Right pane" className="flex shrink-0 border-b border-border">
-            {(["details", "ask"] as const).map((value) => (
+            {(["details", "ask", "changes"] as const).map((value) => (
               <button
                 key={value}
                 type="button"
@@ -190,7 +216,7 @@ export function AnalysisView({
                 onClick={() => setPaneMode(value)}
                 className={`flex-1 cursor-pointer border-b-2 px-2 py-1.5 text-[11px] ${paneMode === value ? "border-accent text-foreground" : "border-transparent text-muted"}`}
               >
-                {value === "details" ? "Details" : "Ask"}
+                {value === "details" ? "Details" : value === "ask" ? "Ask" : "Changes"}
               </button>
             ))}
           </div>
@@ -224,6 +250,16 @@ export function AnalysisView({
               selection={askSelection}
               nav={{ folding, index, hovered, onSelectFile: selectFile, onSelectFolder: selectFolder, onHoverChange: setHovered }}
               onShowTrace={showTrace}
+            />
+          </div>
+          <div className={`analysis-side-scroll min-h-0 flex-1 overflow-y-auto ${paneMode === "changes" ? "" : "hidden"}`}>
+            <ComparisonPanel
+              analysisId={analysisId}
+              comparison={comparison}
+              coverage={coverage}
+              dimUnchanged={dimUnchanged && changes !== null}
+              onDimUnchangedChange={changeDimming}
+              nav={{ folding, hovered, onSelectFile: selectFile, onHoverChange: setHovered }}
             />
           </div>
         </div>

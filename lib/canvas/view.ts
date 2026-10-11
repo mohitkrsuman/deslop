@@ -102,6 +102,9 @@ export function buildCanvasView(
   folding: Folding,
   openFolders: ReadonlySet<string>,
   scrollTops: ReadonlyMap<string, number> = new Map(),
+  // Room for added/removed/changed counts, reserved whenever a comparison
+  // exists so dimming the unchanged never resizes a box.
+  reserveChangeCounts = false,
 ): CanvasView {
   const fileByPath = new Map(files.map((file) => [file.path, file]));
   const labels = shortestUniqueLabels(folding.groups.map((group) => group.folder));
@@ -130,7 +133,8 @@ export function buildCanvasView(
     const fanIn = dependents.get(group.folder)?.size ?? 0;
     const fanOut = dependencies.get(group.folder)?.size ?? 0;
     // Reserve room for category counts so filtering never moves the graph.
-    const meta = `${fileCount}/${fileCount} match  in ${fanIn}  out ${fanOut}`;
+    const meta = `${fileCount}/${fileCount} match  in ${fanIn}  out ${fanOut}` +
+      (reserveChangeCounts ? `  +${fileCount} −${fileCount} ~${fileCount}` : "");
 
     if (!open) {
       for (const file of group.files) anchor.set(file, { node: id, handle: NODE_HANDLE });
@@ -177,7 +181,7 @@ export function buildCanvasView(
     const widest = Math.max(
       textWidth(label),
       textWidth(meta),
-      ...rows.slice(0, SIZES.maxRows).map((row) => textWidth(`${row.label}  ${row.fanIn} ${row.fanOut}`) + 12),
+      ...rows.slice(0, SIZES.maxRows).map((row) => textWidth(`${row.label}  ${row.fanIn} ${row.fanOut}`) + 12 + (reserveChangeCounts ? 16 : 0)),
     );
     return {
       kind: "panel",

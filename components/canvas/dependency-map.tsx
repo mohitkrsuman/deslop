@@ -20,6 +20,7 @@ import {
 import "@xyflow/react/dist/style.css";
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import type { Category, CategoryFilter } from "@/lib/canvas/categories";
+import { changeCountsFor, edgeChange, type ChangeCounts, type ChangeMarks, type FileChange } from "@/lib/canvas/comparison";
 import type { Folding } from "@/lib/canvas/fold";
 import { boundsOf, layoutCanvas } from "@/lib/canvas/layout";
 import { highlightFor, rowKey, type Highlight, type HoverTarget, type Selection } from "@/lib/canvas/selection";
@@ -59,11 +60,31 @@ function useActions(): MapActions {
   return actions;
 }
 
-type FolderNodeType = FlowNode<{ view: FolderView; dim: boolean; selected: boolean; hovered: boolean; matchCount: number | null }, "folder">;
+type FolderNodeType = FlowNode<
+  { view: FolderView; dim: boolean; selected: boolean; hovered: boolean; matchCount: number | null; changeCounts: ChangeCounts | null },
+  "folder"
+>;
 type PanelNodeType = FlowNode<
-  { view: PanelView; highlight: Highlight | null; selectedRow: string | null; selected: boolean; hoveredFolder: boolean; hoveredRow: string | null; categoryFilter: CategoryFilter | null; matchCount: number | null },
+  {
+    view: PanelView; highlight: Highlight | null; selectedRow: string | null; selected: boolean; hoveredFolder: boolean;
+    hoveredRow: string | null; categoryFilter: CategoryFilter | null; matchCount: number | null;
+    changeCounts: ChangeCounts | null; fileChanges: ReadonlyMap<string, FileChange> | null;
+  },
   "panel"
 >;
+
+const CHANGE_GLYPH: Record<FileChange, string> = { added: "+", removed: "−", changed: "~" };
+
+function ChangeCountText({ counts }: { counts: ChangeCounts | null }) {
+  if (!counts || counts.added + counts.removed + counts.changed === 0) return null;
+  return (
+    <span className="tabular-nums">
+      {counts.added > 0 && <span className="text-added"> +{counts.added}</span>}
+      {counts.removed > 0 && <span className="text-removed"> −{counts.removed}</span>}
+      {counts.changed > 0 && <span className="text-foreground"> ~{counts.changed}</span>}
+    </span>
+  );
+}
 
 // Handles are invisible attachment points; the edge meeting the box is enough.
 const handleStyle: CSSProperties = {
@@ -112,6 +133,7 @@ function FolderNode({ data }: NodeProps<FolderNodeType>) {
       <span className="font-mono text-[11px] leading-4">{view.label}</span>
       <span className="text-[10px] leading-4 text-muted">
         {data.matchCount === null ? `${view.fileCount} files` : `${data.matchCount}/${view.fileCount} match`} <FanCounts fanIn={view.fanIn} fanOut={view.fanOut} />
+        <ChangeCountText counts={data.changeCounts} />
       </span>
       <Handles id={NODE_HANDLE} />
     </button>
@@ -194,6 +216,7 @@ function PanelNode({ data }: NodeProps<PanelNodeType>) {
         <span className="font-mono text-[11px] leading-4">{view.label}</span>
         <span className="text-[10px] leading-4 text-muted">
           {data.matchCount === null ? `${view.fileCount} files` : `${data.matchCount}/${view.fileCount} match`} <FanCounts fanIn={view.fanIn} fanOut={view.fanOut} />
+          <ChangeCountText counts={data.changeCounts} />
         </span>
       </button>
       {view.aboveRows > 0 && (
@@ -209,7 +232,9 @@ function PanelNode({ data }: NodeProps<PanelNodeType>) {
         tabIndex={0}
         onScroll={(event) => onRowsScroll(event.currentTarget.scrollTop)}
       >
-        {view.rows.map((row) => (
+        {view.rows.map((row) => {
+          const change = data.fileChanges?.get(row.path);
+          return (
           <button
             key={row.path}
             type="button"
@@ -218,20 +243,30 @@ function PanelNode({ data }: NodeProps<PanelNodeType>) {
             onMouseLeave={clearHover}
             onFocus={() => hoverFile(row.path)}
             onBlur={clearHover}
-            title={row.path}
+            title={change ? `${row.path} — ${change}` : row.path}
             className={`relative flex w-full shrink-0 cursor-pointer items-center gap-2 px-3 text-left ${
               data.selectedRow === row.path || data.hoveredRow === row.path ? "bg-accent/10 text-accent" : ""
-            } ${frameLit && !lit(row.path) ? "opacity-25" : ""}`}
+            } ${frameLit && !lit(row.path) ? "opacity-25" : change === "removed" ? "opacity-60" : ""} ${
+              change === "removed" ? "outline-1 -outline-offset-1 outline-dashed outline-removed" : ""
+            }`}
             style={{ height: SIZES.row }}
           >
             <span aria-hidden="true" className="size-1.5 shrink-0" style={{ background: roleColor(row.kind) }} />
-            <span className="min-w-0 flex-1 truncate font-mono text-[11px]">{row.label}</span>
+            {data.fileChanges && (
+              <span aria-hidden="true" className={`w-2 shrink-0 font-mono text-[11px] ${
+                change === "added" ? "text-added" : change === "removed" ? "text-removed" : ""
+              }`}>{change ? CHANGE_GLYPH[change] : ""}</span>
+            )}
+            <span className={`min-w-0 flex-1 truncate font-mono text-[11px] ${
+              change === "added" ? "text-added" : change === "removed" ? "text-removed line-through" : ""
+            }`}>{row.label}</span>
             <span className="text-[10px] text-muted">
               <FanCounts fanIn={row.fanIn} fanOut={row.fanOut} />
             </span>
             <Handles id={row.path} inside />
           </button>
-        ))}
+          );
+        })}
       </div>
       {view.scrollable && (
         <div
@@ -253,9 +288,11 @@ function PanelNode({ data }: NodeProps<PanelNodeType>) {
 const nodeTypes = { folder: FolderNode, panel: PanelNode };
 
 function MapCanvas({
-  files, edges, categories, categoryFilter, folding, openFolders, onOpenFoldersChange,
+  files, edges, categories, categoryFilter, changes, folding, openFolders, onOpenFoldersChange,
   selection, onSelectionChange, hovered, onHoverChange,
 }: DependencyMapProps) {
+  const changeCounts = useMemo(() => changes ? changeCountsFor(folding, changes) : null, [changes, folding]);
+  const comparing = changes !== null;
   const [scrollTops, setScrollTops] = useState<ReadonlyMap<string, number>>(() => new Map());
   // Key by folder so a manual position survives opening and folding the box.
   const [placements, setPlacements] = useState<ReadonlyMap<string, { position: XYPosition; dragging: boolean }>>(() => new Map());
@@ -265,10 +302,10 @@ function MapCanvas({
 
   const layoutFor = useCallback(
     (open: ReadonlySet<string>, scroll: ReadonlyMap<string, number>) => {
-      const view = buildCanvasView(files, edges, folding, open, scroll);
+      const view = buildCanvasView(files, edges, folding, open, scroll, comparing);
       return { view, positioned: layoutCanvas(view) };
     },
-    [files, edges, folding],
+    [files, edges, folding, comparing],
   );
   const { view, positioned } = useMemo(() => layoutFor(openFolders, scrollTops), [layoutFor, openFolders, scrollTops]);
   const highlight = useMemo(() => highlightFor(view, selection), [view, selection]);
@@ -365,12 +402,13 @@ function MapCanvas({
           height: node.height,
         };
         const matchCount = categoryFilter ? categoryFilter.counts.get(node.folder) ?? 0 : null;
+        const nodeChangeCounts = changeCounts?.get(node.folder) ?? null;
         return node.kind === "folder"
           ? {
               ...base, type: "folder",
               data: {
                 view: node, selected, hovered: hoveredFolder || Boolean(hoveredFile),
-                matchCount,
+                matchCount, changeCounts: nodeChangeCounts,
                 dim: !hoveredFolder && !hoveredFile && (highlight ? !highlight.nodes.has(node.id) : matchCount === 0),
               },
             }
@@ -386,21 +424,24 @@ function MapCanvas({
                 hoveredRow: hoveredFile,
                 categoryFilter,
                 matchCount,
+                changeCounts: nodeChangeCounts,
+                fileChanges: changes?.files ?? null,
               },
             };
       }),
-    [positioned, placements, selection, highlight, hovered, folding, categoryFilter],
+    [positioned, placements, selection, highlight, hovered, folding, categoryFilter, changes, changeCounts],
   );
 
   const flowEdges = useMemo<FlowEdge[]>(
     () =>
       view.edges.map((edge) => {
         const lit = highlight ? highlight.edges.has(edge.id) : !categoryFilter || categoryFilter.litEdge(edge);
-        // Colour only means direction, so it only appears once there's a
-        // selection to be direction relative to.
+        // With a selection, colour means direction. Without one, it means what
+        // a comparison added or removed, and nothing otherwise.
+        const change = !highlight && changes ? edgeChange(edge, changes) : null;
         const stroke = highlight && lit
           ? highlight.outgoing.has(edge.id) ? "var(--outgoing)" : "var(--incoming)"
-          : "var(--muted)";
+          : change === "added" ? "var(--added)" : change === "removed" ? "var(--removed)" : "var(--muted)";
         return {
           id: edge.id,
           source: edge.source,
@@ -411,11 +452,12 @@ function MapCanvas({
           style: {
             stroke,
             strokeWidth: Math.min(3, 1 + Math.log2(edge.imports) / 2),
-            opacity: lit ? (highlight ? 0.9 : 0.35) : 0.06,
+            opacity: lit ? (highlight || change ? 0.9 : 0.35) : 0.06,
+            ...(change === "removed" ? { strokeDasharray: "4 3" } : {}),
           },
         };
       }),
-    [view, highlight, categoryFilter],
+    [view, highlight, categoryFilter, changes],
   );
 
   return (
@@ -474,6 +516,8 @@ interface DependencyMapProps {
   edges: Edge[];
   categories: Category[];
   categoryFilter: CategoryFilter | null;
+  // A complete comparison's marks; the files and edges then include both sides.
+  changes: ChangeMarks | null;
   folding: Folding;
   openFolders: ReadonlySet<string>;
   onOpenFoldersChange: (folders: ReadonlySet<string>) => void;

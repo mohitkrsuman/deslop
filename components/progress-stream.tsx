@@ -28,8 +28,12 @@ export function ProgressStream({ id, initial }: {
         setProgress({ stage: payload.stage, message: String(payload.message),
           stageStartedAt: String(payload.stage_started_at), status: String(payload.status) });
         setNow(Date.now());
-        if (payload.stage === "complete") router.refresh();
-      }).subscribe();
+        if (payload.stage === "complete" || payload.stage === "failed") router.refresh();
+      })
+      // A run can finish before this subscription is live — a failed fetch
+      // takes under a second — and its broadcast is then never seen. One
+      // server read once subscribed catches that; it's not polling.
+      .subscribe((status) => { if (status === "SUBSCRIBED") router.refresh(); });
     return () => { void client.removeChannel(channel); };
   }, [client, id, router]);
 

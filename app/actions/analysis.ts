@@ -73,6 +73,9 @@ export async function rerunAnalysis(id: string): Promise<void> {
     error_message: null, failed_stage: null,
   }).eq("id", id).eq("organization_id", orgId);
   if (reset.error) throw reset.error;
+  // The comparison's "before" is about to be replaced.
+  const dropped = await client.from("comparisons").delete().eq("analysis_id", id).eq("organization_id", orgId);
+  if (dropped.error) throw dropped.error;
   after(() => runAnalysis(id, orgId, project.repository_url));
   redirect(`/analysis/${id}`);
 }
