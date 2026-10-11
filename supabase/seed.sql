@@ -42,9 +42,9 @@ values
   ('15000000-0000-0000-0000-000000000001', 'org_deslop_alpha', '11000000-0000-0000-0000-000000000001', '11100000-0000-0000-0000-000000000001', 'The entry point wires the application together.')
 on conflict (id) do nothing;
 
-insert into public.file_roles (id, organization_id, analysis_id, file_id, role)
+insert into public.file_roles (id, organization_id, analysis_id, file_id, role, model)
 values
-  ('16000000-0000-0000-0000-000000000001', 'org_deslop_alpha', '11000000-0000-0000-0000-000000000001', '11100000-0000-0000-0000-000000000001', 'entry point')
+  ('16000000-0000-0000-0000-000000000001', 'org_deslop_alpha', '11000000-0000-0000-0000-000000000001', '11100000-0000-0000-0000-000000000001', 'utility', 'claude-opus-5-5')
 on conflict (id) do nothing;
 
 insert into public.insights (id, organization_id, analysis_id, file_id, title, body)

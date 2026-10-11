@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useState } from "react";
-import { checkFreshness, requestFileExplanation, requestFolderExplanation, type Freshness } from "@/app/actions/explain";
+import { checkFreshness, requestFileExplanation, requestFolderExplanation, type ExplainResult, type Freshness } from "@/app/actions/explain";
 import { ExplanationPanel, type ExplanationEntry } from "@/components/canvas/explanation-panel";
 import { GraphWalk } from "@/components/canvas/graph-walk";
 import { PathList } from "@/components/canvas/path-list";
@@ -175,9 +175,12 @@ function useExplanations(analysisId: string) {
   const [freshness, setFreshness] = useState<ReadonlyMap<string, Freshness>>(() => new Map());
   const explain = useCallback(async (key: string, subject: { kind: "file"; path: string } | { kind: "folder"; folder: string }) => {
     setEntries((current) => new Map(current).set(key, { status: "loading" }));
-    const result = subject.kind === "file"
-      ? await requestFileExplanation(analysisId, subject.path)
-      : await requestFolderExplanation(analysisId, subject.folder);
+    // A rejected action (network drop, server restart) must still leave the
+    // loading state, or the retry button never appears.
+    const result: ExplainResult = await (subject.kind === "file"
+      ? requestFileExplanation(analysisId, subject.path)
+      : requestFolderExplanation(analysisId, subject.folder)
+    ).catch((cause: unknown) => ({ ok: false, error: cause instanceof Error ? cause.message : String(cause) }));
     setEntries((current) => new Map(current).set(key, { status: "done", result }));
     if (!result.ok) return;
     const fresh = await checkFreshness(analysisId, subject.kind === "file" ? subject.path : null);

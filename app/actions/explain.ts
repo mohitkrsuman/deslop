@@ -1,6 +1,7 @@
 "use server";
 
 import { createHash } from "node:crypto";
+import { auth } from "@clerk/nextjs/server";
 import { userModelCache } from "@/lib/ai/cache";
 import { MODEL } from "@/lib/ai/client";
 import { explainFile, explainFolder, fileExplainInput, folderExplainInput } from "@/lib/ai/explain";
@@ -28,6 +29,8 @@ function messageOf(cause: unknown): string {
 // Everything is read through the signed-in user's client, so an analysis from
 // another organization is simply not found.
 async function loadContext(analysisId: string) {
+  const { orgId, userId } = await auth();
+  if (!orgId || !userId) throw new Error("Choose an organization first.");
   const client = createServerSupabaseClient();
   const { data: analysis, error } = await client.from("analyses")
     .select("id,name,adapter,commit_sha,project_id,organization_id").eq("id", analysisId).maybeSingle();

@@ -13,7 +13,7 @@ Spec.
 - [Run deterministic checks](#run-deterministic-checks)
 - [Run and inspect the Harness](#run-and-inspect-the-harness)
 - [Revise the correct layer](#revise-the-correct-layer)
-- [Finish with reusable knowledge](#finish-with-reusable-knowledge)
+- [Finish by reconciling reusable knowledge](#finish-by-reconciling-reusable-knowledge)
 
 ## Read references at each decision
 

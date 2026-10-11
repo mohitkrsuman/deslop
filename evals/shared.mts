@@ -66,16 +66,16 @@ export interface DatasetExample {
 export async function ensureDataset(
   client: Client, name: string, description: string, rebuild: boolean, build: () => Promise<DatasetExample[]>,
 ): Promise<Example[]> {
-  if (await client.hasDataset({ datasetName: name })) {
-    if (!rebuild) {
-      const examples: Example[] = [];
-      for await (const example of client.listExamples({ datasetName: name })) examples.push(example);
-      console.log(`Using dataset "${name}" (${examples.length} examples). Pass --rebuild to replace it.`);
-      return examples;
-    }
-    await client.deleteDataset({ datasetName: name });
+  const exists = await client.hasDataset({ datasetName: name });
+  if (exists && !rebuild) {
+    const examples: Example[] = [];
+    for await (const example of client.listExamples({ datasetName: name })) examples.push(example);
+    console.log(`Using dataset "${name}" (${examples.length} examples). Pass --rebuild to replace it.`);
+    return examples;
   }
+  // Built before anything is deleted, so a failed rebuild keeps the old dataset.
   const built = await build();
+  if (exists) await client.deleteDataset({ datasetName: name });
   const dataset = await client.createDataset(name, { description });
   await client.createExamples(built.map((example) => ({ ...example, dataset_id: dataset.id })));
   const examples: Example[] = [];

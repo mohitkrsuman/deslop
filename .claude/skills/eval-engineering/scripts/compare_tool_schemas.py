@@ -124,6 +124,13 @@ def index_tools(value: Any) -> dict[str, dict[str, Any]]:
     return result
 
 
+def _normalized_type(value: Any) -> Any:
+    # A list of types is a union, so member order carries no meaning.
+    if isinstance(value, list):
+        return tuple(sorted(json.dumps(item, sort_keys=True) for item in value))
+    return value
+
+
 def compare_schema(
     required: Any,
     actual: Any,
@@ -149,7 +156,7 @@ def compare_schema(
 
     required_type = required.get("type")
     actual_type = actual.get("type")
-    if required_type != actual_type:
+    if _normalized_type(required_type) != _normalized_type(actual_type):
         findings.append(
             {"path": f"{path}.type", "issue": "type_changed", "required": str(required_type), "actual": str(actual_type)}
         )

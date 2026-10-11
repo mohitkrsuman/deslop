@@ -23,6 +23,8 @@ declare const tools: {
  * Column names that must not be overwritten by structured output merging.
  */
 const RESERVED_COLUMNS = new Set(["id", "file"]);
+// Model output is untrusted; these would reach the row's prototype chain.
+const UNSAFE_KEYS = new Set(["__proto__", "constructor", "prototype"]);
 
 /**
  * Call the PTC `swarm_task` tool.
@@ -153,7 +155,7 @@ export function mergeResult(
   value: Record<string, unknown>,
 ): void {
   for (const [k, v] of Object.entries(value)) {
-    if (!RESERVED_COLUMNS.has(k)) {
+    if (!RESERVED_COLUMNS.has(k) && !UNSAFE_KEYS.has(k)) {
       row[k] = v;
     }
   }

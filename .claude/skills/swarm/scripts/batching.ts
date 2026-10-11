@@ -287,17 +287,28 @@ export function unpackBatchResults(
 ): { results: Map<string, unknown>; missing: string[] } {
   const resultsMap = new Map<string, unknown>();
   const missing: string[] = [];
+  const expected = new Set(expectedIds);
 
   try {
     const parsed = JSON.parse(response);
     const items: Array<Record<string, unknown>> = parsed?.results ?? [];
 
+    // An unknown or repeated id means the response can't be trusted to map
+    // results to rows, so none of it is used.
+    const seen = new Set<string>();
+    let malformed = false;
     for (const item of items) {
       if (item && typeof item.id === "string") {
+        if (!expected.has(item.id) || seen.has(item.id)) {
+          malformed = true;
+          break;
+        }
+        seen.add(item.id);
         const { id, ...fields } = item;
         resultsMap.set(id, fields);
       }
     }
+    if (malformed) resultsMap.clear();
   } catch {
     // Parse failure — all IDs are missing
   }
