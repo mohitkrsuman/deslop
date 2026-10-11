@@ -13,9 +13,16 @@ import { foldDirectories } from "@/lib/canvas/fold";
 import { type HoverTarget, type Selection } from "@/lib/canvas/selection";
 import { nodeIdFor } from "@/lib/canvas/view";
 import { buildInsights } from "@/lib/graph/insights";
+import type { TracingStatus } from "@/lib/ai/client";
 import type { Edge, FileNode, ParserCoverage } from "@/lib/parser/types.mts";
 
 export function AnalysisView({
+  analysisId,
+  commitSha,
+  modelRoles,
+  labellingError,
+  tracing,
+  rerun,
   name,
   adapter,
   importCount,
@@ -25,6 +32,12 @@ export function AnalysisView({
   coverage,
   coveragePercent,
 }: {
+  analysisId: string;
+  commitSha: string | null;
+  modelRoles: string[];
+  labellingError: string | null;
+  tracing: TracingStatus;
+  rerun: () => Promise<void>;
   name: string;
   adapter: string;
   importCount: number;
@@ -52,6 +65,12 @@ export function AnalysisView({
     setHovered(null);
     setSelection({ kind: "row", node: nodeIdFor(folder, true), path });
   }, [folding]);
+
+  const selectFolder = useCallback((folder: string) => {
+    setHovered(null);
+    setSelection({ kind: "node", id: nodeIdFor(folder, openFolders.has(folder)) });
+  }, [openFolders]);
+  const modelRoleSet = useMemo(() => new Set(modelRoles), [modelRoles]);
 
   return (
     <AnalysisShell
@@ -116,6 +135,12 @@ export function AnalysisView({
       }
       detail={
         <DetailPane
+          analysisId={analysisId}
+          commitSha={commitSha}
+          tracing={tracing}
+          rerun={rerun}
+          modelRoles={modelRoleSet}
+          labellingError={labellingError}
           name={name}
           adapter={adapter}
           importCount={importCount}
@@ -127,6 +152,7 @@ export function AnalysisView({
           selection={selection}
           hovered={hovered}
           onSelectFile={selectFile}
+          onSelectFolder={selectFolder}
           onHoverChange={setHovered}
         />
       }

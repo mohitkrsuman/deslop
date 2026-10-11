@@ -1,22 +1,18 @@
 import "server-only";
 
-import { rm } from "node:fs/promises";
-import { createClient } from "@supabase/supabase-js";
+import { readFile, rm } from "node:fs/promises";
+import path from "node:path";
+import { classifyFile, excerptOf } from "@/lib/ai/classify";
+import { MODEL } from "@/lib/ai/client";
+import { workerModelCache } from "@/lib/ai/cache";
 import { fetchGithubArchive, parseGithubUrl } from "@/lib/github-archive";
 import { FRAMEWORK_ADAPTERS } from "@/lib/parser/adapters/index.mts";
 import { parseRepository } from "@/lib/parser/parse.mts";
 import type { ParserResult } from "@/lib/parser/types.mts";
+import { createWorkerClient } from "@/lib/supabase-worker";
+import { GENERIC_ROLES } from "@/lib/taxonomy.mts";
 
-export type PipelineStage = "queued" | "fetching" | "selecting" | "parsing" | "storing" | "complete" | "failed";
-
-export function createWorkerClient() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.SUPABASE_SECRET_KEY ?? process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !key) throw new Error("Set SUPABASE_SECRET_KEY for analysis writes.");
-  return createClient(url, key, {
-    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
-  });
-}
+export type PipelineStage = "queued" | "fetching" | "selecting" | "parsing" | "storing" | "labelling" | "complete" | "failed";
 
 type Worker = ReturnType<typeof createWorkerClient>;
 
@@ -38,7 +34,7 @@ function coveragePercent(result: ParserResult): number {
   return Math.round(Math.min(files, resolved) * 10000) / 100;
 }
 
-async function storeResult(client: Worker, id: string, organizationId: string, result: ParserResult, commitSha: string) {
+async function storeResult(client: Worker, id: string, organizationId: string, result: ParserResult, commitSha: string): Promise<Map<string, string>> {
   const removed = await client.from("files").delete().eq("analysis_id", id);
   if (removed.error) throw removed.error;
 
@@ -77,6 +73,51 @@ async function storeResult(client: Worker, id: string, organizationId: string, r
     coverage_percent: coveragePercent(result), import_count: result.coverage.imports.found,
   }).eq("id", id);
   if (error) throw error;
+  return ids;
+}
+
+const LABELLING_CONCURRENCY = 6;
+
+// Gives files no adapter identified a non-structural role. A failure here
+// leaves those files unidentified and is recorded, rather than costing the map.
+async function labelUnidentified(
+  client: Worker, id: string, organizationId: string, directory: string, result: ParserResult, ids: Map<string, string>,
+): Promise<string | null> {
+  const targets = result.files.filter((file) => file.kind === GENERIC_ROLES.other);
+  if (targets.length === 0) return null;
+  const imports = new Map<string, Set<string>>();
+  for (const edge of result.edges) imports.set(edge.from, (imports.get(edge.from) ?? new Set()).add(edge.to));
+
+  const cache = workerModelCache(organizationId);
+  const rows: { organization_id: string; analysis_id: string; file_id: string; role: string; model: string }[] = [];
+  const failures: string[] = [];
+  const queue = [...targets];
+  let done = 0;
+  async function work() {
+    for (let file = queue.shift(); file; file = queue.shift()) {
+      try {
+        const source = await readFile(path.join(directory, file.path), "utf8");
+        const { output } = await classifyFile({
+          path: file.path, sha256: file.sha256, imports: [...imports.get(file.path) ?? []].sort(), excerpt: excerptOf(source),
+        }, cache);
+        if (output.role !== "none") {
+          rows.push({ organization_id: organizationId, analysis_id: id, file_id: ids.get(file.path)!, role: output.role, model: MODEL });
+        }
+      } catch (cause) {
+        failures.push(`${file.path}: ${cause instanceof Error ? cause.message : String(cause)}`);
+      }
+      done += 1;
+      if (done % 25 === 0) await stage(client, id, "labelling", `Labelled ${done} of ${targets.length} files no adapter identified`);
+    }
+  }
+  await Promise.all(Array.from({ length: LABELLING_CONCURRENCY }, work));
+
+  for (let start = 0; start < rows.length; start += 300) {
+    const { error } = await client.from("file_roles").insert(rows.slice(start, start + 300));
+    if (error) throw error;
+  }
+  if (failures.length === 0) return null;
+  return `${failures.length} of ${targets.length} files could not be labelled. First: ${failures[0]}`;
 }
 
 export async function runAnalysis(id: string, organizationId: string, repositoryUrl: string) {
@@ -95,7 +136,12 @@ export async function runAnalysis(id: string, organizationId: string, repository
     const result = await parseRepository(directory, FRAMEWORK_ADAPTERS);
     currentStage = "storing";
     await stage(client, id, currentStage, "Storing the map and coverage report");
-    await storeResult(client, id, organizationId, result, archive.commitSha);
+    const ids = await storeResult(client, id, organizationId, result, archive.commitSha);
+    currentStage = "labelling";
+    await stage(client, id, currentStage, "Labelling files no adapter identified");
+    const labellingError = await labelUnidentified(client, id, organizationId, directory, result, ids);
+    const labelled = await client.from("analyses").update({ labelling_error: labellingError }).eq("id", id);
+    if (labelled.error) throw labelled.error;
     await stage(client, id, "complete", "Map ready");
   } catch (cause) {
     const message = cause instanceof Error ? cause.message : String(cause);

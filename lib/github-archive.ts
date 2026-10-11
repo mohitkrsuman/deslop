@@ -101,7 +101,9 @@ async function extractArchive(archivePath: string, directory: string) {
   if (files === 0) throw new Error("Repository archive contains no files.");
 }
 
-export async function fetchGithubArchive(repository: ReturnType<typeof parseGithubUrl>) {
+type Repository = ReturnType<typeof parseGithubUrl>;
+
+export async function fetchHeadCommit(repository: Repository): Promise<string> {
   const api = await fetch(`https://api.github.com/repos/${repository.owner}/${repository.repo}/commits/HEAD`, {
     headers: { Accept: "application/vnd.github+json", "User-Agent": "deslop-analysis" },
     signal: AbortSignal.timeout(30000), cache: "no-store",
@@ -115,8 +117,25 @@ export async function fetchGithubArchive(repository: ReturnType<typeof parseGith
   if (typeof commit.sha !== "string" || !/^[a-f0-9]{40}$/.test(commit.sha)) {
     throw new Error("GitHub did not return a commit SHA.");
   }
+  return commit.sha;
+}
+
+// One file's bytes at an exact commit, or null when the commit has no such file.
+// Fetched by SHA rather than branch, so a CDN-cached copy can't be out of date.
+export async function fetchFileAtCommit(repository: Repository, commitSha: string, filePath: string): Promise<Buffer | null> {
+  const encoded = filePath.split("/").map(encodeURIComponent).join("/");
+  const response = await fetch(`https://raw.githubusercontent.com/${repository.owner}/${repository.repo}/${commitSha}/${encoded}`, {
+    signal: AbortSignal.timeout(30000), cache: "no-store",
+  });
+  if (response.status === 404) return null;
+  if (!response.ok) throw new Error(`GitHub returned HTTP ${response.status} for ${filePath}.`);
+  return Buffer.from(await response.arrayBuffer());
+}
+
+export async function fetchGithubArchive(repository: Repository) {
+  const commitSha = await fetchHeadCommit(repository);
   const response = await fetch(
-    `https://codeload.github.com/${repository.owner}/${repository.repo}/tar.gz/${commit.sha}`,
+    `https://codeload.github.com/${repository.owner}/${repository.repo}/tar.gz/${commitSha}`,
     { signal: AbortSignal.timeout(10 * 60 * 1000), cache: "no-store" },
   );
   const directory = await mkdtemp(path.join(tmpdir(), "deslop-repo-"));
@@ -124,7 +143,7 @@ export async function fetchGithubArchive(repository: ReturnType<typeof parseGith
   try {
     await downloadArchive(response, archivePath);
     await extractArchive(archivePath, directory);
-    return { directory, commitSha: commit.sha };
+    return { directory, commitSha };
   } catch (error) {
     await rm(directory, { recursive: true, force: true });
     throw error;

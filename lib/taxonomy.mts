@@ -66,6 +66,25 @@ export const GENERIC_ROLES = {
   other: "other",
 } as const;
 
+// The only roles a model may give a file no adapter identified. Page, route and
+// controller decide the route table and entry-point colouring, so convention
+// alone owns them. Every taxonomy lists all of these.
+export const MODEL_ASSIGNABLE_ROLES = [
+  APPLICATION_ROLES.service,
+  APPLICATION_ROLES.repository,
+  APPLICATION_ROLES.model,
+  APPLICATION_ROLES.utility,
+  GENERIC_ROLES.config,
+  APPLICATION_ROLES.component,
+  APPLICATION_ROLES.hook,
+] as const;
+
+export type ModelAssignableRole = typeof MODEL_ASSIGNABLE_ROLES[number];
+
+export function isModelAssignableRole(role: string): role is ModelAssignableRole {
+  return (MODEL_ASSIGNABLE_ROLES as readonly string[]).includes(role);
+}
+
 const GENERIC_CATEGORIES: readonly RoleCategory[] = [
   { role: GENERIC_ROLES.test, label: "Tests", section: "repository" },
   { role: GENERIC_ROLES.typeDeclaration, label: "Type declarations", section: "repository" },

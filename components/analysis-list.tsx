@@ -19,17 +19,15 @@ const pageSize = 5;
 export function AnalysisList({ initial, orgId, canDelete }: { initial: AnalysisSummary[]; orgId: string; canDelete: boolean }) {
   const [updates, setUpdates] = useState<Record<string, Partial<AnalysisSummary>>>({});
   const [now, setNow] = useState(() => Date.now());
-  const [page, setPage] = useState(0);
+  const [requestedPage, setPage] = useState(0);
   const { getToken } = useAuth();
   const router = useRouter();
   const client = useMemo(() => createBrowserSupabaseClient(() => getToken()), [getToken]);
   const rows = initial.map((row) => ({ ...row, ...updates[row.id] }));
   const pageCount = Math.ceil(rows.length / pageSize);
+  // Clamped at render time: a delete can shrink the list under the current page.
+  const page = Math.min(requestedPage, Math.max(0, pageCount - 1));
   const visibleRows = rows.slice(page * pageSize, (page + 1) * pageSize);
-
-  useEffect(() => {
-    setPage((current) => Math.min(current, Math.max(0, pageCount - 1)));
-  }, [pageCount]);
 
   useEffect(() => {
     const channel = client.channel(`analyses:org:${orgId}`, { config: { private: true } })
@@ -86,10 +84,10 @@ export function AnalysisList({ initial, orgId, canDelete }: { initial: AnalysisS
       <div className="flex items-center justify-between gap-3 border-t border-border px-4 py-3 text-xs">
         <span className="text-muted">Showing {page * pageSize + 1}-{Math.min((page + 1) * pageSize, rows.length)} of {rows.length}</span>
         {pageCount > 1 && <nav aria-label="Analysis pages" className="flex items-center gap-2">
-          <button type="button" disabled={page === 0} onClick={() => setPage((current) => current - 1)}
+          <button type="button" disabled={page === 0} onClick={() => setPage(page - 1)}
             className="border border-border px-2.5 py-1.5 hover:bg-background disabled:cursor-not-allowed disabled:opacity-40">Previous</button>
           <span aria-live="polite" className="min-w-16 text-center text-muted">{page + 1} / {pageCount}</span>
-          <button type="button" disabled={page >= pageCount - 1} onClick={() => setPage((current) => current + 1)}
+          <button type="button" disabled={page >= pageCount - 1} onClick={() => setPage(page + 1)}
             className="border border-border px-2.5 py-1.5 hover:bg-background disabled:cursor-not-allowed disabled:opacity-40">Next</button>
         </nav>}
       </div>
