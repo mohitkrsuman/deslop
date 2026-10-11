@@ -1,7 +1,9 @@
 import { clerkMiddleware } from "@clerk/nextjs/server";
 
+// The agent tool endpoints authenticate with a grant, not a session.
 function isPublicPath(pathname: string) {
   return (
+    pathname.startsWith("/api/agent-tools/") ||
     pathname === "/sign-in" ||
     pathname.startsWith("/sign-in/") ||
     pathname === "/sign-up" ||

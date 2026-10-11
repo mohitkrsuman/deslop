@@ -3,7 +3,7 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { RouteRow } from "../components/canvas/route-table.tsx";
 import type { Database } from "./database.types.ts";
-import type { Edge, FileNode, ImportKind } from "./parser/types.mts";
+import type { Edge, FileNode, ImportKind, ParserCoverage } from "./parser/types.mts";
 import { GENERIC_ROLES, isModelAssignableRole, normalizeRole } from "./taxonomy.mts";
 
 export interface AnalysisGraph {
@@ -67,4 +67,15 @@ export async function loadAnalysisGraph(client: SupabaseClient<Database>, analys
     if (file) routes.push({ file, method: row.method, path: row.path });
   }
   return { files, edges, routes, modelRoles };
+}
+
+// Analyses stored before route notes existed have none to show.
+export function coverageOf(stored: unknown, files: FileNode[], edges: Edge[]): ParserCoverage {
+  const coverage = stored as Partial<ParserCoverage> | null;
+  return coverage?.imports ? { ...coverage as ParserCoverage, routeNotes: coverage.routeNotes ?? [] } : {
+    filesFound: files.length, filesParsed: files.length, filesSkipped: 0,
+    skippedFiles: [], skippedDirectories: [], configurationWarnings: [], routeNotes: [],
+    imports: { found: edges.length, resolved: edges.length, external: 0,
+      excluded: 0, unresolved: 0, unresolvedExamples: [] },
+  };
 }

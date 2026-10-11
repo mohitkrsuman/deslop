@@ -20,7 +20,7 @@ export function AnalysisShell({
       <main aria-label="Map" className="relative min-h-0 min-w-0">
         {map}
       </main>
-      <aside aria-label="Details" className="analysis-side-scroll min-h-0 overflow-y-auto border-l border-border bg-surface">
+      <aside aria-label="Details" className="min-h-0 overflow-hidden border-l border-border bg-surface">
         {detail}
       </aside>
     </div>

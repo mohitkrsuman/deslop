@@ -2,6 +2,7 @@
 
 import { useCallback, useMemo, useState } from "react";
 import { AnalysisShell } from "@/components/analysis-shell";
+import { AskPanel, type AskSelection } from "@/components/canvas/ask-panel";
 import { CategoryRail } from "@/components/canvas/category-rail";
 import { DependencyMap } from "@/components/canvas/dependency-map";
 import { DetailPane } from "@/components/canvas/detail-pane";
@@ -71,6 +72,13 @@ export function AnalysisView({
     setSelection({ kind: "node", id: nodeIdFor(folder, openFolders.has(folder)) });
   }, [openFolders]);
   const modelRoleSet = useMemo(() => new Set(modelRoles), [modelRoles]);
+  const [paneMode, setPaneMode] = useState<"details" | "ask">("details");
+  const askSelection = useMemo<AskSelection>(() => {
+    if (selection?.kind === "row") return { kind: "file", path: selection.path };
+    if (selection?.kind !== "node") return null;
+    const group = folding.groups.find((item) => selection.id === nodeIdFor(item.folder, false) || selection.id === nodeIdFor(item.folder, true));
+    return group ? { kind: "folder", path: group.folder } : null;
+  }, [selection, folding]);
 
   return (
     <AnalysisShell
@@ -134,27 +142,55 @@ export function AnalysisView({
         </div>
       }
       detail={
-        <DetailPane
-          analysisId={analysisId}
-          commitSha={commitSha}
-          tracing={tracing}
-          rerun={rerun}
-          modelRoles={modelRoleSet}
-          labellingError={labellingError}
-          name={name}
-          adapter={adapter}
-          importCount={importCount}
-          routeCount={routes.length}
-          files={files}
-          categories={categories}
-          folding={folding}
-          index={index}
-          selection={selection}
-          hovered={hovered}
-          onSelectFile={selectFile}
-          onSelectFolder={selectFolder}
-          onHoverChange={setHovered}
-        />
+        <div className="flex h-full min-h-0 flex-col">
+          {/* Ask is a mode of the whole pane, not a tab beside Structure: a
+              repository question doesn't need a file selected. */}
+          <div role="tablist" aria-label="Right pane" className="flex shrink-0 border-b border-border">
+            {(["details", "ask"] as const).map((value) => (
+              <button
+                key={value}
+                type="button"
+                role="tab"
+                aria-selected={paneMode === value}
+                onClick={() => setPaneMode(value)}
+                className={`flex-1 cursor-pointer border-b-2 px-2 py-1.5 text-[11px] ${paneMode === value ? "border-accent text-foreground" : "border-transparent text-muted"}`}
+              >
+                {value === "details" ? "Details" : "Ask"}
+              </button>
+            ))}
+          </div>
+          {/* Both stay mounted, so switching keeps the conversation and the open explanation. */}
+          <div className={`analysis-side-scroll min-h-0 flex-1 overflow-y-auto ${paneMode === "details" ? "" : "hidden"}`}>
+            <DetailPane
+              analysisId={analysisId}
+              commitSha={commitSha}
+              tracing={tracing}
+              rerun={rerun}
+              modelRoles={modelRoleSet}
+              labellingError={labellingError}
+              name={name}
+              adapter={adapter}
+              importCount={importCount}
+              routeCount={routes.length}
+              files={files}
+              categories={categories}
+              folding={folding}
+              index={index}
+              selection={selection}
+              hovered={hovered}
+              onSelectFile={selectFile}
+              onSelectFolder={selectFolder}
+              onHoverChange={setHovered}
+            />
+          </div>
+          <div className={`min-h-0 flex-1 ${paneMode === "ask" ? "" : "hidden"}`}>
+            <AskPanel
+              analysisId={analysisId}
+              selection={askSelection}
+              nav={{ folding, index, hovered, onSelectFile: selectFile, onSelectFolder: selectFolder, onHoverChange: setHovered }}
+            />
+          </div>
+        </div>
       }
     />
   );

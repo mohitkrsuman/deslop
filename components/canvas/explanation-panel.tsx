@@ -53,7 +53,7 @@ function Inlines({ items, nav }: { items: Inline[]; nav: ExplanationNavigation }
   });
 }
 
-function ExplanationText({ text, nav }: { text: string; nav: ExplanationNavigation }) {
+export function ExplanationText({ text, nav }: { text: string; nav: ExplanationNavigation }) {
   const { folding, index } = nav;
   const blocks = useMemo(() => {
     const folders = new Set(folding.groups.map((group) => group.folder).filter((folder) => folder !== "."));

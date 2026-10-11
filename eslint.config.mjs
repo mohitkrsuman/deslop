@@ -13,6 +13,8 @@ const eslintConfig = defineConfig([
     "build/**",
     "next-env.d.ts",
     "tests/.external/**",
+    // A separate service with its own dependencies and checks.
+    "deslop-agent/**",
   ]),
 ]);
 
