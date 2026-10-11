@@ -67,6 +67,14 @@ export type Database = {
         };
         Insert: never; Update: never; Relationships: [];
       };
+      agent_grants: {
+        Row: {
+          id: string; token_hash: string; analysis_id: string; organization_id: string;
+          expires_at: string; created_at: string;
+        };
+        Insert: { token_hash: string; analysis_id: string; organization_id: string; expires_at: string };
+        Update: never; Relationships: [];
+      };
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;

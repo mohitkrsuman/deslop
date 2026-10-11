@@ -7,8 +7,7 @@ import { AnalysisSettingsButton } from "@/components/analysis-settings-button";
 import { ProgressStream } from "@/components/progress-stream";
 import { createServerSupabaseClient } from "@/lib/supabase";
 import { tracingStatus } from "@/lib/ai/client";
-import { loadAnalysisGraph } from "@/lib/analysis-graph";
-import type { ParserCoverage } from "@/lib/parser/types.mts";
+import { coverageOf, loadAnalysisGraph } from "@/lib/analysis-graph";
 
 export const maxDuration = 900;
 
@@ -40,14 +39,7 @@ export default async function AnalysisPage({ params }: PageProps<"/analysis/[id]
 
   const adapter = analysis.adapter ?? "fallback";
   const { files, edges, routes, modelRoles } = await loadAnalysisGraph(client, id, adapter);
-  // Analyses stored before route notes existed have none to show.
-  const storedCoverage = analysis.coverage as Partial<ParserCoverage> | null;
-  const coverage: ParserCoverage = storedCoverage?.imports ? { ...storedCoverage as ParserCoverage, routeNotes: storedCoverage.routeNotes ?? [] } : {
-    filesFound: files.length, filesParsed: files.length, filesSkipped: 0,
-    skippedFiles: [], skippedDirectories: [], configurationWarnings: [], routeNotes: [],
-    imports: { found: edges.length, resolved: edges.length, external: 0,
-      excluded: 0, unresolved: 0, unresolvedExamples: [] },
-  };
+  const coverage = coverageOf(analysis.coverage, files, edges);
 
   return <div className="flex h-full min-h-0 flex-col">
     <div className="flex shrink-0 items-center justify-between gap-4 border-b border-border bg-surface px-4 py-2 text-xs">

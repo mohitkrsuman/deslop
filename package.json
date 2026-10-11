@@ -18,6 +18,7 @@
     "@anthropic-ai/sdk": "^0.132.1",
     "@clerk/nextjs": "^7.9.10",
     "@dagrejs/dagre": "^3.1.1",
+    "@langchain/langgraph-sdk": "^1.12.3",
     "@supabase/ssr": "^0.12.7",
     "@supabase/supabase-js": "^2.117.2",
     "@xyflow/react": "^12.12.0",

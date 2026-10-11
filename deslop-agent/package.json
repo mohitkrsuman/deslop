@@ -1,0 +1,17 @@
+{
+  "name": "deslop-agent",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "mda dev . --port 2024 --no-browser",
+    "build": "mda build ."
+  },
+  "type": "module",
+  "dependencies": {
+    "@langchain/anthropic": "^1.5.12",
+    "@langchain/core": "^1.2.17",
+    "langchain": "^1.5.16",
+    "managed-deepagents": "0.9.1-dev.16",
+    "zod": "^4.6.5"
+  }
+}
