@@ -53,7 +53,7 @@ export async function requestFileExplanation(analysisId: string, path: string): 
     if (!file) return { ok: false, error: `${path} is not in this analysis.` };
     const input = fileExplainInput(analysis, graph.files, graph.edges, file);
     const { output, cached } = await explainFile(input, userModelCache(client, organizationId));
-    return { ok: true, ...output, cached, model: MODEL };
+    return { ok: true, text: output.text, notes: output.notes, cached, model: MODEL };
   } catch (cause) {
     return { ok: false, error: messageOf(cause) };
   }
@@ -68,7 +68,7 @@ export async function requestFolderExplanation(analysisId: string, folder: strin
     if (!group) return { ok: false, error: `${folder} is not a folder on this map.` };
     const input = folderExplainInput(analysis, graph.files, graph.edges, folding, group.folder, group.files);
     const { output, cached } = await explainFolder(input, userModelCache(client, organizationId));
-    return { ok: true, ...output, cached, model: MODEL };
+    return { ok: true, text: output.text, notes: output.notes, cached, model: MODEL };
   } catch (cause) {
     return { ok: false, error: messageOf(cause) };
   }

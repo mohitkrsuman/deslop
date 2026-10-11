@@ -1,7 +1,7 @@
 import "server-only";
 
-import { cachedTask } from "@/lib/ai/client";
-import { MODEL_ASSIGNABLE_ROLES, isModelAssignableRole, type ModelAssignableRole } from "@/lib/taxonomy.mts";
+import { cachedTask } from "./client.ts";
+import { MODEL_ASSIGNABLE_ROLES, isModelAssignableRole, type ModelAssignableRole } from "../taxonomy.mts";
 
 export interface ClassifyInput {
   path: string;

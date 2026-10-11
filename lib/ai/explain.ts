@@ -1,22 +1,27 @@
 import "server-only";
 
 import { createHash } from "node:crypto";
-import { cachedTask } from "@/lib/ai/client";
-import type { Folding } from "@/lib/canvas/fold";
-import { fetchFileAtCommit, parseGithubUrl } from "@/lib/github-archive";
-import type { Edge, FileNode, ImportKind } from "@/lib/parser/types.mts";
-import { GENERIC_ROLES, taxonomyFor } from "@/lib/taxonomy.mts";
+import { cachedTask } from "./client.ts";
+import { inventedPathCheck, pathsInSource } from "./invented-paths.ts";
+import type { Folding } from "../canvas/fold.ts";
+import { fetchFileAtCommit, parseGithubUrl } from "../github-archive.ts";
+import type { Edge, FileNode, ImportKind } from "../parser/types.mts";
+import { GENERIC_ROLES, taxonomyFor } from "../taxonomy.mts";
 
 export interface Explanation {
   text: string;
   // What the model was not shown, stated rather than hidden.
   notes: string[];
+  // Path-shaped tokens in the source the model was shown, for the invented-path
+  // check. Absent on explanations cached before it was recorded.
+  sourcePaths?: string[];
 }
 
 function isExplanation(value: unknown): value is Explanation {
   if (typeof value !== "object" || value === null) return false;
-  const { text, notes } = value as Record<string, unknown>;
-  return typeof text === "string" && Array.isArray(notes) && notes.every((note) => typeof note === "string");
+  const { text, notes, sourcePaths } = value as Record<string, unknown>;
+  const strings = (list: unknown) => Array.isArray(list) && list.every((item) => typeof item === "string");
+  return typeof text === "string" && strings(notes) && (sourcePaths === undefined || strings(sourcePaths));
 }
 
 // Three pieces of formatting are permitted and rendered. Forbidding all of it
@@ -87,7 +92,7 @@ export function fileExplainInput(
 const MAX_SOURCE_LINES = 1500;
 const MAX_SOURCE_CHARS = 60000;
 
-async function sourceFor(input: FileExplainInput): Promise<{ source: string; notes: string[] }> {
+export async function sourceFor(input: FileExplainInput): Promise<{ source: string; notes: string[] }> {
   const bytes = await fetchFileAtCommit(parseGithubUrl(input.origin.repositoryUrl), input.origin.commitSha, input.path);
   if (!bytes) throw new Error(`${input.path} is missing from the analysed commit.`);
   if (createHash("sha256").update(bytes).digest("hex") !== input.sha256) {
@@ -110,6 +115,31 @@ function repositoryLine(input: { repository: string; framework: string | null })
   return `Repository: ${input.repository}${input.framework ? ` (${input.framework})` : ""}`;
 }
 
+// Exported so the evals run the shipped prompt, not a copy of it.
+export const EXPLAIN_FILE_SYSTEM = [
+  "You explain one file of a TypeScript or JavaScript repository to a developer who did not write it.",
+  "Say what the file does and what part it plays among the files around it: what it relies on, and what relies on it.",
+  "Two or three short paragraphs, under 200 words. Bullets only where a list is genuinely clearer.",
+  BOUNDARY, FORMAT,
+].join(" ");
+
+export function fileExplanationMessage(input: FileExplainInput, source: string, notes: string[]): string {
+  return [
+    repositoryLine(input),
+    `File: ${input.path} (${input.role}, ${input.lineCount} lines)`,
+    `It imports these ${input.imports.length} repository files:`, neighbourLines(input.imports),
+    `These ${input.importedBy.length} repository files import it:`, neighbourLines(input.importedBy),
+    notes.length > 0 ? `Source, truncated (${notes[0]}):` : "Source:",
+    "<source>", source, "</source>",
+  ].join("\n");
+}
+
+// The repository paths the model is handed, as the parser resolved them. Paths
+// written in the source are shown too and are checked separately.
+export function fileShownPaths(input: { path: string; imports: { path: string }[]; importedBy: { path: string }[] }): string[] {
+  return [input.path, ...input.imports.map((item) => item.path), ...input.importedBy.map((item) => item.path)];
+}
+
 export const explainFile = cachedTask<FileExplainInput, Explanation>({
   name: "explain-file",
   version: 1,
@@ -118,32 +148,16 @@ export const explainFile = cachedTask<FileExplainInput, Explanation>({
   async prepare(input) {
     const { source, notes } = await sourceFor(input);
     return {
-      read: (text) => ({ text, notes }),
+      read: (text) => ({ text, notes, sourcePaths: pathsInSource(source) }),
       request: {
         maxTokens: 16000,
-        system: [
-          "You explain one file of a TypeScript or JavaScript repository to a developer who did not write it.",
-          "Say what the file does and what part it plays among the files around it: what it relies on, and what relies on it.",
-          "Two or three short paragraphs, under 200 words. Bullets only where a list is genuinely clearer.",
-          BOUNDARY, FORMAT,
-        ].join(" "),
-        messages: [
-          {
-            role: "user",
-            content: [
-              repositoryLine(input),
-              `File: ${input.path} (${input.role}, ${input.lineCount} lines)`,
-              `It imports these ${input.imports.length} repository files:`, neighbourLines(input.imports),
-              `These ${input.importedBy.length} repository files import it:`, neighbourLines(input.importedBy),
-              notes.length > 0 ? `Source, truncated (${notes[0]}):` : "Source:",
-              "<source>", source, "</source>",
-            ].join("\n"),
-          },
-        ],
+        system: EXPLAIN_FILE_SYSTEM,
+        messages: [{ role: "user", content: fileExplanationMessage(input, source, notes) }],
       },
     };
   },
   isOutput: isExplanation,
+  liveChecks: (input, output) => [inventedPathCheck(output.text, fileShownPaths(input), output.sourcePaths)],
 });
 
 interface FolderLink {
@@ -218,6 +232,10 @@ export function folderExplainInput(
   };
 }
 
+export function folderShownPaths(input: { folder: string; files: { path: string }[]; incoming: { folder: string }[]; outgoing: { folder: string }[] }): string[] {
+  return [input.folder, ...input.files.map((file) => file.path), ...input.incoming.map((link) => link.folder), ...input.outgoing.map((link) => link.folder)];
+}
+
 function linkLines(list: FolderLink[]): string {
   if (list.length === 0) return "(none)";
   return list.map((link) => `- ${link.folder}: ${link.imports} imports across ${link.files} files`).join("\n");
@@ -258,5 +276,6 @@ export const explainFolder = cachedTask<FolderExplainInput, Explanation>({
     };
   },
   isOutput: isExplanation,
+  liveChecks: (input, output) => [inventedPathCheck(output.text, folderShownPaths(input))],
 });
 

@@ -1,9 +1,9 @@
 import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { ModelCache } from "@/lib/ai/client";
-import type { Database } from "@/lib/database.types";
-import { createWorkerClient } from "@/lib/supabase-worker";
+import type { ModelCache } from "./client.ts";
+import type { Database } from "../database.types.ts";
+import { createWorkerClient } from "../supabase-worker.ts";
 
 async function writeEntry(organizationId: string, key: string, entry: Parameters<ModelCache["write"]>[1]) {
   const { error } = await createWorkerClient().from("model_cache").upsert({

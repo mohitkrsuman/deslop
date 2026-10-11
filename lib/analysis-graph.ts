@@ -1,10 +1,10 @@
 import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { RouteRow } from "@/components/canvas/route-table";
-import type { Database } from "@/lib/database.types";
-import type { Edge, FileNode, ImportKind } from "@/lib/parser/types.mts";
-import { GENERIC_ROLES, isModelAssignableRole, normalizeRole } from "@/lib/taxonomy.mts";
+import type { RouteRow } from "../components/canvas/route-table.tsx";
+import type { Database } from "./database.types.ts";
+import type { Edge, FileNode, ImportKind } from "./parser/types.mts";
+import { GENERIC_ROLES, isModelAssignableRole, normalizeRole } from "./taxonomy.mts";
 
 export interface AnalysisGraph {
   files: FileNode[];
